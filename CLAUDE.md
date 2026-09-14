@@ -123,7 +123,13 @@ horizontal. Skeletons com shimmer preservam as dimensões do conteúdo e respeit
 
 ## Fluxo de trabalho
 
-Trabalhamos **um ponto do desafio por vez**, via `/pipeline`, na branch `dev`.
+Trabalhamos **um ponto do desafio por vez**, via `/pipeline`.
+
+**Branches:** `dev` é o tronco do projeto — `main` guarda apenas o enunciado
+original. Toda branch nova, inclusive as que o `/pipeline` cria por fase, sai de
+`dev` e volta para `dev`. Nunca ramifique de `main`.
+
+**Commits:** sem trailer `Co-Authored-By`.
 
 **Ao fim de cada ponto, pare e peça validação do usuário antes de commitar.**
 Não commite por conta própria.
