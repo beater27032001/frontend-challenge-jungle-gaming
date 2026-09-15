@@ -3,10 +3,7 @@
 > **Fonte de verdade visual.** Extraída do Figma e transcrita aqui — os agentes do
 > pipeline não têm acesso ao MCP. **Não invente nem estime medida, cor ou copy.**
 > Complementa `specs/02-design-system.md` e `specs/03-catalogo.md`.
->
-> ⚠️ **Esta transcrição está INCOMPLETA.** Bati no limite de chamadas do MCP do
-> Figma (plano Starter) antes de extrair o mobile. O que está marcado
-> `[EXTRAÇÃO PENDENTE]` não pode ser implementado por estimativa — veja §5.
+
 
 Figma `BliVZDosX5BcSpvhYvdE0V`. Desktop `10:244` · Mobile `15:5536`.
 
@@ -22,6 +19,7 @@ Não existem em `src/index.css` e precisam ser adicionados:
 | `--text-title-20` | `1.25rem` | quantidade no stepper (`leading-[28px]`) |
 | `--text-title-22` | `1.375rem` | preço no detalhe (`leading-[16px]`, bold) |
 | `--text-heading-28` | `1.75rem` | título do NFT (bold) |
+| `--color-amber` | `#e3a44e` | aparece no pill de avaliação mobile |
 
 ## 2. Desktop — bloco Product, node `70342:2764`
 
@@ -63,39 +61,66 @@ Abaixo do Product: `Section Heading` (1200×28) com o título e uma régua, depo
 `Frame 204` (1200×347) com os cards e `Carousel Dots` (52×12) centralizados em
 `x=574`. Cards mostram arte, título e preço — ex.: "Cosmic Bloom #118", "1.29 ETH".
 
-`[EXTRAÇÃO PENDENTE]` medidas internas dos cards do carrossel.
+`[EXTRAÇÃO PENDENTE]` medidas internas dos cards do carrossel — único item
+ainda não transcrito, e de escopo menor que o resto.
 
-## 4. Mobile — node `15:5536`, estrutura confirmada por metadata + screenshot
+## 4. Mobile — node `15:5536`
 
-**Não é o desktop reescalado**, como em todas as fases anteriores. São três
-camadas sobrepostas:
+**Não é o desktop reescalado.** Três camadas sobrepostas.
 
-| Camada | Node | Geometria |
-| --- | --- | --- |
-| Hero | `70396:241` | 414×506, arte com pontos de carrossel em `y=365` (56×7) |
-| Details Sheet | `70396:242` | 414×504, começa em **y=392** — sobrepõe o hero |
-| Buy Bar | `70396:245` | 414×164, fixa em **y=732** |
+### 4.1 Hero — `70396:241`, 414×506
 
-Do screenshot, confirmado visualmente:
+Fundo: `linear-gradient(137.64deg, #241612 11.999%, #2f1d15 106.59%)` cobrindo
+os 414×506 — o mesmo par de cores do card mobile do catálogo.
 
-- Seta de voltar e coração de favoritar **flutuam sobre a arte**, em botões
-  circulares nos cantos superiores.
-- A avaliação vira um **pill compacto** `★ 4.8(19)` à direita do título — o
-  desktop usa 5 estrelas e texto por extenso.
-- "Edição:" com os mesmos chips do desktop (`1/10`, `1/10`, `1/50` selecionado,
-  `ABERTA`).
-- Metadados em três linhas, iguais às do desktop.
-- Buy Bar: rótulo "Qtd." + stepper `−` `1` `+` à esquerda, preço `1.19 ETH` à
-  direita, e abaixo o botão "Comprar NFT" com um botão de carrinho ao lado.
+Bloco de conteúdo em `left-[28px] top-[23px]`, largura 361, `flex-col gap-[8px]`:
 
-`[EXTRAÇÃO PENDENTE]` — **não implementar por estimativa**:
+- **Linha de botões flutuantes** (`justify-between`, largura total): voltar à
+  esquerda e favoritar à direita. Ambos **35×35**, `bg-surface-raised`, borda 1px
+  `border-strong`, `rounded-[17.5px]`. Ícone de voltar 20×20 (`p-[8px]`); coração
+  16×14,2 centralizado.
+- **Arte**: altura **356**, largura total, `rounded-[24px]`, `object-cover`.
 
-1. Medidas internas do `Details Sheet` (`70396:242`): raio do topo, padding,
-   gaps, e a geometria do pill de avaliação.
-2. Medidas do `Buy Bar` (`70396:245`): alturas, larguras dos dois botões,
-   tamanho do stepper, e se há borda ou sombra separando do conteúdo.
-3. Geometria dos botões flutuantes de voltar e favoritar.
-4. Gradiente de fundo do hero mobile.
+Pontos de carrossel: 56×7 em `left-[179px] top-[365px]` — centralizados sob a arte.
+
+### 4.2 Details Sheet — `70396:242`, 414×504, sobrepõe o hero a partir de y=392
+
+`bg-surface-card`, **`rounded-t-[31px]`**, `pt-[32px] pb-[24px] px-[24px]`,
+`flex-col gap-[12px]`.
+
+| Parte | Especificação |
+| --- | --- |
+| Título | 20px bold, `leading-[16px]`, `foreground` |
+| Pill de avaliação | **80,16×27**, borda 1px `primary`, `rounded-[32px]`; estrela 14px, nota "4.8" 14px medium em `foreground`, "(19)" 14px regular em `text-secondary` |
+| Descrição | 14px regular, `leading-[24px]`, `text-secondary`, largura 361, altura 71 |
+| "Edição:" | 15px bold `leading-[16px]`; gap 8 até os chips |
+| Chips | altura 28, **`gap-[12px]`** (o desktop usa 6); larguras 42 / 42 / 46 / 66; selecionado em `text-accent` medium, demais em `text-secondary` regular |
+| Token Info | 3 linhas, 15px regular em `secondary`, `gap-[12px]` |
+
+Copy da descrição mobile é **mais curta** que a do desktop: "Um colecionável
+digital 1/50 finalizado à mão da coleção Kurio Editions, verificado na Ethereum."
+
+### 4.3 Buy Bar — `70396:245`, 414×164, fixa em y=732
+
+`bg-surface-card`, **`rounded-t-[40px]`**, `pt-[20px] pb-[36px] px-[24px]`,
+`drop-shadow-[0_0_10px_rgba(10,6,4,0.45)]`. Conteúdo em `flex-col gap-[20px]`.
+
+**Linha 1** (`justify-between`):
+- "Qtd." 15px medium em `text-secondary`, `gap-[8px]` até o stepper
+- Stepper `gap-[12px]`: botões **20×30**, `bg-primary`, borda 1px `#140d0a`,
+  `rounded-[20px]`, `drop-shadow-[0_4px_6px_rgba(20,13,10,0.15)]`, ícone 16px;
+  número 18px medium `leading-[25px]`
+- Preço à direita: **20px bold** `leading-[16px]` em `text-accent`
+
+**Linha 2** (`gap-[12px]`):
+- **"Comprar NFT"**: 196×60, `rounded-[40px]`, `pl-[48px] pr-[44px] py-[20px]`,
+  fundo `linear-gradient(100.37deg, #d28a4c 3.96%, rgba(210,138,76,0.8) 121.97%)`,
+  texto 16px bold `leading-[20px]` em `ink`
+- **Botão de carrinho**: 60×60, `bg-surface-raised`, borda 1px `border-strong`,
+  `rounded-[40px]`, ícone 20px, `p-[20px]`
+
+O stepper mobile é **menor** que o desktop (20×30 contra 33×49,5) e o botão
+principal é pill de 60 de altura, não o retângulo de 40 do desktop.
 
 ## 5. Comportamento — o que o desafio exige (§3 e §4)
 
