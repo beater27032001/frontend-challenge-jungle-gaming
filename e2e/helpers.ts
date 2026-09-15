@@ -93,6 +93,20 @@ export async function logout(page: Page): Promise<void> {
   await apiFetch(page, '/api/auth/logout', { method: 'POST' })
 }
 
+/**
+ * Fase 9. Espera o `socket.io-client` estar de fato conectado ao binding do
+ * MSW: `window.__realtime` só existe depois que `useRealtime` monta, e
+ * `connects` só sobe no handler `connect` do socket real.
+ */
+export async function awaitRealtimeReady(page: Page): Promise<void> {
+  await page.waitForFunction(() => (window.__realtime?.connects ?? 0) >= 1)
+  await expect.poll(() => page.evaluate(() => window.__mocks!.realtime.connections())).toBe(1)
+}
+
+export async function realtimeStats(page: Page) {
+  return page.evaluate(() => ({ ...window.__realtime! }))
+}
+
 export async function setScenario(page: Page, name: string): Promise<void> {
   await page.evaluate((name) => window.__mocks!.setScenario(name as never), name)
 }
@@ -196,4 +210,12 @@ export async function pressFirstTab(page: Page): Promise<void> {
   await page.bringToFront()
   await expect.poll(() => page.evaluate(() => document.hasFocus())).toBe(true)
   await page.keyboard.press('Tab')
+
+  // Endurecimento da fase 9: com o boot mais pesado (conexão Socket.IO + query
+  // do carrinho), `document.hasFocus()` verdadeiro ainda deixa uma janela em
+  // que o primeiro Tab não move nada e o foco fica no `body`. Repetir é seguro
+  // e NÃO mascara defeito: só repete quando NENHUM elemento recebeu foco. Se o
+  // Tab levar ao elemento errado, a asserção de quem chamou continua falhando.
+  const landed = await page.evaluate(() => document.activeElement !== document.body)
+  if (!landed) await page.keyboard.press('Tab')
 }
