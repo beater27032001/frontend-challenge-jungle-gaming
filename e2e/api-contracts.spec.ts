@@ -3,7 +3,20 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { expect, test, type Page } from '@playwright/test'
 import Big from 'big.js'
-import { ANA, apiFetch, addToCart, boot, bootReset, BRUNO, clearCart, login, logout, reset, setScenario } from './helpers'
+import {
+  ANA,
+  apiFetch,
+  addToCart,
+  awaitMswReady,
+  boot,
+  bootReset,
+  BRUNO,
+  clearCart,
+  login,
+  logout,
+  reset,
+  setScenario,
+} from './helpers'
 
 /**
  * Phase 1 contract tests: exercise the MSW mock API (types, db, scenarios)
@@ -156,7 +169,7 @@ test.describe('Auth', () => {
     expect(ok.body.user.email).toBe(ANA.email)
 
     await page.reload()
-    await expect(page.getByRole('status')).toHaveText(/MSW respondeu/i)
+    await awaitMswReady(page)
     const session = await apiFetch(page, '/api/auth/session')
     expect(session.status).toBe(200)
     expect(session.body.user.email).toBe(ANA.email)
@@ -234,7 +247,7 @@ test.describe('Favorites', () => {
     expect(added.body.nftIds).toContain('nft-005')
 
     await page.reload()
-    await expect(page.getByRole('status')).toHaveText(/MSW respondeu/i)
+    await awaitMswReady(page)
     const afterReload = await apiFetch(page, '/api/favorites')
     expect(afterReload.body.nftIds).toContain('nft-005')
 
@@ -867,7 +880,7 @@ test.describe('Scenarios', () => {
     // Mutate again, this time restore via the query-param form.
     await apiFetch(page, '/api/favorites/nft-006', { method: 'PUT' })
     await page.goto('/?mock-reset=1')
-    await expect(page.getByRole('status')).toHaveText(/MSW respondeu/i)
+    await awaitMswReady(page)
     await login(page, ANA)
     const favoritesAfterQueryReset = await apiFetch(page, '/api/favorites')
     expect(favoritesAfterQueryReset.body.nftIds).not.toContain('nft-006')
@@ -897,7 +910,7 @@ test.describe('Fix Plan (iteration 2): NftSummary derived fields stay coherent',
     return item
   }
 
-  test('seed remains unchanged: fresh reset top-level fields match the known fixture values, SEED_VERSION stays 2', async ({
+  test('seed remains unchanged: fresh reset top-level fields match the known fixture values, SEED_VERSION stays 3', async ({
     page,
   }) => {
     await bootReset(page)
@@ -910,8 +923,12 @@ test.describe('Fix Plan (iteration 2): NftSummary derived fields stay coherent',
     const dump = await page.evaluate(() => localStorage.getItem('greenmint:db:v1'))
     const dbDump = JSON.parse(dump!)
     // Fase 2 (spec §3): fixtures reconciled with the 9-category/3-network
-    // design system, SEED_VERSION bumped from 1 to 2.
-    expect(dbDump.seedVersion).toBe(2)
+    // design system, SEED_VERSION bumped from 1 to 2. Fase 3 bumps it again
+    // to 3 (network field added to the NFT model, specs/03-catalogo.md
+    // resolução OQ3) — the spec's own "mapa de impacto" claim that no test
+    // asserts `seedVersion` missed this one; updated, not deleted (same
+    // precedent as the fase-2 category/network test updates).
+    expect(dbDump.seedVersion).toBe(3)
   })
 
   test('sold-out: top-level `available` (not just editions[0]) drops to 0 on both detail and list, and never contradicts editions', async ({
@@ -1112,7 +1129,7 @@ test.describe('Fix Plan (iteration 2): NftSummary derived fields stay coherent',
       localStorage.setItem('greenmint:db:v1', JSON.stringify(dbDump))
     })
     await page.reload()
-    await expect(page.getByRole('status')).toHaveText(/MSW respondeu/i)
+    await awaitMswReady(page)
 
     const depleted = await apiFetch(page, '/api/nfts/nft-022')
     expect(depleted.body.available).toBe(0)
@@ -1195,7 +1212,7 @@ test.describe('Long-session coherence across multiple NFTs, mutations and reload
     const buy1 = await purchase(page, 'nft-005', 'nft-005-e1', 2, 'session-buy-005-a')
     expect(buy1.status, JSON.stringify(buy1.body)).toBe(201)
     await page.reload()
-    await expect(page.getByRole('status')).toHaveText(/MSW respondeu/i)
+    await awaitMswReady(page)
     const s1 = await assertCoherent(page, 'nft-005')
     expect(s1.available).toBe(8) // 10 - 2
 
@@ -1206,7 +1223,7 @@ test.describe('Long-session coherence across multiple NFTs, mutations and reload
     expect(soldOut.status).toBe(409)
     await setScenario(page, 'default')
     await page.reload()
-    await expect(page.getByRole('status')).toHaveText(/MSW respondeu/i)
+    await awaitMswReady(page)
     // Both NFTs touched so far must independently still be coherent.
     const s2a = await assertCoherent(page, 'nft-005')
     expect(s2a.available).toBe(8) // untouched by step 2, must not have drifted
@@ -1232,7 +1249,7 @@ test.describe('Long-session coherence across multiple NFTs, mutations and reload
     const buy2 = await purchase(page, 'nft-005', 'nft-005-e1', 3, 'session-buy-005-b')
     expect(buy2.status, JSON.stringify(buy2.body)).toBe(201)
     await page.reload()
-    await expect(page.getByRole('status')).toHaveText(/MSW respondeu/i)
+    await awaitMswReady(page)
 
     // Final checkpoint: all three NFTs touched across the whole session are
     // still each internally coherent AND correctly reflect every mutation
@@ -1272,7 +1289,7 @@ test.describe('Persistence of derived fields in localStorage', () => {
     // ever happened transiently in-memory, this would resurface the seed's
     // stale `available: 10` after rehydration.
     await page.reload()
-    await expect(page.getByRole('status')).toHaveText(/MSW respondeu/i)
+    await awaitMswReady(page)
     const detail = await apiFetch(page, '/api/nfts/nft-019')
     expect(detail.body.available).toBe(6)
 
@@ -1314,7 +1331,7 @@ test.describe('Reset after a heavy multi-mutation session', () => {
     expect(beforeReset006.body.priceEth).toBe('0.132')
 
     await page.goto('/?mock-reset=1')
-    await expect(page.getByRole('status')).toHaveText(/MSW respondeu/i)
+    await awaitMswReady(page)
 
     const after025 = await apiFetch(page, '/api/nfts/nft-025')
     const after030 = await apiFetch(page, '/api/nfts/nft-030')
@@ -1491,7 +1508,7 @@ test.describe('Data hygiene', () => {
       )
     })
     await page.reload()
-    await expect(page.getByRole('status')).toHaveText(/MSW respondeu/i)
+    await awaitMswReady(page)
 
     const list = await apiFetch(page, '/api/nfts')
     expect(list.body.total).toBe(48)

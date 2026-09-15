@@ -16,9 +16,42 @@ export const BRUNO = { email: 'bruno@greenmint.dev', password: 'GreenMint#2' }
 
 export type ApiResult<T = any> = { status: number; body: T }
 
+/**
+ * Fase 3: toda tela agora dispara queries reais no boot (incl.
+ * `GET /auth/session`, esperado 401 para visitante anônimo). O app trata
+ * isso sem lançar (`useSession` devolve `null`, sem console.error do app),
+ * mas o próprio Chromium loga "Failed to load resource" para qualquer
+ * resposta XHR/fetch >=400, fora do alcance do JS da página — ruído
+ * esperado do boot default, não erro do app. Filtra antes de comparar
+ * `consoleErrors` com `[]`.
+ */
+export function isExpectedBootNoise(message: string): boolean {
+  // Único ruído tolerado num boot limpo: o 401 de `GET /api/auth/session` para
+  // visitante anônimo, que o Chromium loga na rede mesmo o app tratando-o como
+  // resposta válida. Escopado pela URL (que vem de `msg.location()`, anexada ao
+  // texto na coleta) — sem isso o filtro engoliria imagem quebrada, 404 de asset
+  // ou 500 de qualquer rota, e o gate deixaria de cobrar.
+  return (
+    /ERR_FAILED|Failed to load resource/.test(message) && message.includes('/api/auth/session')
+  )
+}
+
+/**
+ * "Mock layer is up and answering" — the semantics `boot()` always meant,
+ * now checked without depending on any screen's UI: `window.__mocks` is
+ * installed by `startWorker()` before React mounts (see src/mocks/browser.ts),
+ * and `/api/health` is the one route reachable even in every failure
+ * scenario (src/mocks/handlers/index.ts keeps it outside `withScenario`).
+ */
+export async function awaitMswReady(page: Page): Promise<void> {
+  await page.waitForFunction(() => !!window.__mocks)
+  const health = await apiFetch(page, '/api/health')
+  expect(health.status).toBe(200)
+}
+
 export async function boot(page: Page, query = ''): Promise<void> {
   await page.goto(`/${query}`)
-  await expect(page.getByRole('status')).toHaveText(/MSW respondeu/i)
+  await awaitMswReady(page)
 }
 
 /**
