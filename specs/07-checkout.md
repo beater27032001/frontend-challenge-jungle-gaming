@@ -42,22 +42,36 @@ Todo campo: altura **40**, borda 1px `border-strong`, **`rounded-[3px]`**,
 Abaixo: rádio **"Usar outra carteira?"** (15px) e textarea **"Observação do
 colecionador (opcional)"**, 350×152, mesmo raio e borda.
 
-### ⚠️ Tensão entre o design e o contrato — precisa de decisão
+### ✅ Tensão entre o design e o contrato — RESOLVIDA
 
 O contrato de pedido (`src/types/order.ts:15`) aceita **`payer: { name, email }`**
-mais carteira e rede. Mas o formulário desenhado tem **nove campos**: nome de
-exibição, nome de usuário, nome do perfil, código de indicação, nome ENS, ENS
-secundária, observação…
+mais carteira e rede. O formulário desenhado tem **nove campos**: nome de exibição,
+nome de usuário, nome do perfil, código de indicação, nome ENS, ENS secundária,
+observação…
 
-A maioria **não tem para onde ir**. O §3 diz "validar os campos do layout", mas o
-§11 reprova fluxo que aparenta funcionar sem backend.
+**Decisão do usuário (vale para as fases 7 e 8): nenhum campo decorativo.** Campo
+que o usuário preenche e a API ignora é mentira de UI, e a regra 5 do desafio
+proíbe. Mas a conclusão aqui **não** é estender o contrato de pedido — é notar onde
+esses campos moram de verdade:
 
-Três saídas, e o Planner deve escolher e justificar:
-1. Renderizar todos, validar todos, enviar só o que o contrato aceita — e registrar
-   que os demais são de perfil, não de pedido.
-2. Renderizar só o que o contrato usa — perde fidelidade.
-3. Estender o contrato para aceitá-los — é o precedente das fases 2, 3 e 4
-   (categorias, `network`, labels de edição), mas é o mais caro.
+| Campo desenhado | Onde ele pertence |
+| --- | --- |
+| Nome de exibição, Nome de usuário, Nome do perfil, Nome ENS | `Profile` — fase 8 |
+| Código de indicação, ENS secundária | `Wallet` — fase 8 |
+| Observação | não existe em contrato nenhum |
+
+Os sete primeiros são **campos de perfil e de carteira duplicados na tela errada**
+pelo designer — o mesmo padrão que aparece na tela de Carteiras (spec 08 §3.5, onde
+quatro campos de perfil reaparecem). A fase 8 estende `Profile` com `username` e
+`ensName`, e `Wallet` com `type` e `referralCode`; a partir daí esses dados **já
+têm dono**, e o checkout não precisa coletá-los outra vez.
+
+Portanto o formulário de checkout coleta **carteira e rede**, exatamente como o
+mobile já faz (§6.4), e `payer` vem da sessão. Nada de reabrir: é a mesma leitura do
+desenho mobile, que não tem formulário de pagamento nenhum.
+
+"Observação" fica de fora — não existe em contrato, não é pedido pelo desafio, e
+inventar um campo de texto livre no pedido é escopo novo.
 
 Havendo prazo curto, a **1** é a mais defensável: mantém o layout, valida como o §3
 pede, e não inventa backend.
@@ -211,16 +225,13 @@ do CTA do carrinho (108.86deg), com 15px em vez de 16px.
 
 ### 6.7 A tensão dos nove campos, resolvida pelo mobile
 
-O mobile não coleta nome nem e-mail: coleta **carteira e rede**. Isso reforça a
-recomendação já feita na seção 3 — renderizar e validar o que o desenho pede, e
-enviar só `payer: { name, email }`, que é o que `src/types/order.ts:15` aceita.
-No mobile, `payer` vem da sessão (fase 5), não de campo de formulário.
+O mobile não coleta nome nem e-mail: coleta **carteira e rede**. Ele é o desenho
+canônico, e confirma a resolução registrada na seção 3: o checkout — desktop e
+mobile — coleta carteira e rede, e `payer` vem da sessão da fase 5.
 
-Decisão a confirmar antes de implementar: se o mobile é o comportamento canônico,
-os nove campos do desktop são **supérfluos ao contrato** e viram campos de
-apresentação. Alternativa honesta e mais barata: no mobile, seguir o desenho
-exatamente; no desktop, manter os nove campos com validação real mas mapeando
-apenas os dois que o contrato aceita.
+Os campos de perfil e carteira que o desktop desenha passam a ter dono na fase 8
+(`Profile.username`, `Profile.ensName`, `Wallet.type`, `Wallet.referralCode`), então
+não são coletados aqui. Decidido pelo usuário; não reabrir.
 
 ### 6.8 Confirmação em mobile
 

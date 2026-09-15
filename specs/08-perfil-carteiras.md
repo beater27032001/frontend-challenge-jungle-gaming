@@ -42,11 +42,17 @@ muda de cor** — todos já são `text-accent`. Logo o estado ativo é **só a b
 esquerda**, o que viola "estado nunca só por cor" de forma inversa: é só forma.
 Aceitável para leitores de tela via `aria-current="page"`, que é obrigatório aqui.
 
-⚠️ **Cinco dos oito itens não têm tela**: Atividade, Lista de interesse, Ofertas,
-Arquivos baixados e Suporte não existem no Figma nem no desafio. Renderizar como
-link morto é pior que não renderizar. Recomendação: renderizar desabilitados com
-`aria-disabled` e `title` explicando, ou omitir — **decisão do usuário**, registrar
-no ARCHITECTURE.md.
+✅ **DECIDIDO — cinco dos oito itens não têm tela.** Atividade, Lista de interesse,
+Ofertas, Arquivos baixados e Suporte não existem no Figma nem no desafio. O usuário
+decidiu: **renderizar os cinco**, sem tela.
+
+Como: item inerte, **não** `<a>` nem `<Link>`. Renderizar como `<span>` ou `<button
+disabled>` com `aria-disabled="true"` e um `title` curto ("Em breve"). Nada que
+navegue — link para rota inexistente devolve 404 e conta como defeito.
+
+Visual: mesmo `text-accent` dos outros (o Figma não desenha estado desabilitado
+aqui), mas sem `cursor-pointer` e sem hover. O estado não pode ser só cor: o
+`aria-disabled` é o que carrega a informação. Registrar no ARCHITECTURE.md.
 
 ## 2. Perfil do Colecionador — `70386:239` (Profile Form)
 
@@ -116,13 +122,34 @@ obrigatório com asterisco**, e não tem campo de bio.
 | Avatar | `avatarUrl` ✅ |
 | *(ausente)* | `bio` existe no contrato e não é desenhado |
 
-Recomendação, alinhada com o que já foi decidido no checkout (spec 07 §6.7):
-renderizar e validar o que o desenho pede, enviar só o que o contrato aceita.
-E-mail em `readOnly` com `aria-describedby` explicando por quê — mostrar um campo
-editável que a API ignora é mentira de UI. "Nome de usuário", "Nome ENS" e "Apelido
-da carteira" ficam de fora ou entram como apresentação inerte; **decisão do
-usuário**. `POST /api/profile/password` já existe e cobre o bloco de senha inteiro,
-incluindo o erro `currentPassword: 'Senha atual incorreta.'`.
+✅ **DECIDIDO — estender o mock.** O usuário decidiu que todo campo desenhado deve
+salvar de verdade. Nada de campo decorativo: input que o usuário preenche e a API
+ignora é mentira de UI, e a regra 5 do desafio proíbe.
+
+O que muda em `src/types/profile.ts` e `src/mocks/handlers/profile.ts`:
+
+| Campo | Ação |
+| --- | --- |
+| Nome de usuário | **adicionar** `username` a `Profile` e a `updateProfileSchema` |
+| Nome ENS | **adicionar** `ensName` a `Profile` e a `updateProfileSchema` |
+| Apelido da carteira | **remover da tela** — é `Wallet.label`, pertence à §3 |
+| E-mail | continua **imutável**: `readOnly` + `aria-describedby` explicando |
+| `bio` | fica no contrato, **sem campo na tela** (o Figma não desenha) |
+
+`username` precisa ser único por usuário — o handler deve devolver **409** em
+colisão, como `POST /api/wallets` já faz com endereço, e a UI associa o erro ao
+campo. `ensName` é texto livre com o sufixo `.eth` vindo do select de 78px; guardar
+o valor completo, não só o prefixo.
+
+Os dois campos entram nas fixtures (`src/mocks/fixtures.ts`) e ganham teste de
+contrato — incluindo o 409 de `username` duplicado, que precisa **falhar uma vez**
+antes de virar verde, pela regra do `CLAUDE.md`.
+
+O e-mail permanece imutável porque o contrato o definiu assim na fase 1 e trocar
+e-mail sem reverificação seria inventar um fluxo que o desafio não pede.
+
+`POST /api/profile/password` já existe e cobre o bloco de senha inteiro, incluindo o
+erro `currentPassword: 'Senha atual incorreta.'`.
 
 ## 3. Carteiras — `70390:239` (Wallets Form)
 
@@ -197,15 +224,56 @@ de lista preenchida — derivar do card mobile de carteira do checkout
 | Nome de exibição, Nome do perfil, E-mail, Nome ENS | pertencem ao **perfil** |
 | Código de indicação | **não existe** |
 
-Os quatro campos de perfil aparecem duplicados aqui. Enviar `PATCH /api/profile`
-junto com `POST /api/wallets` na mesma submissão seria inventar comportamento.
-Recomendação: **esta tela grava carteira**; os campos de perfil ficam de fora.
-Mesma decisão-mãe das seções 2.4 e 07 §6.7 — resolver as três de uma vez.
+✅ **DECIDIDO — estender o mock, mesma regra da §2.4.**
 
-⚠️ **Não existe `DELETE /api/wallets/:id`**. O menu `⋮` do card sugere remover, e
-`src/mocks/handlers/wallets.ts` só tem GET, POST e PATCH. Se o menu for
-implementado com "Remover", o handler precisa ser criado nesta fase — e aí a regra
-de "ao menos uma primária" precisa de teste: remover a primária quando é a única.
+| Campo do Figma | Ação |
+| --- | --- |
+| Tipo de carteira | **adicionar** `type` a `Wallet` e a `walletSchema` |
+| Código de indicação | **adicionar** `referralCode` (opcional) a `Wallet` |
+| Nome de exibição, Nome do perfil, E-mail, Nome ENS | **remover da tela** |
+
+Os quatro campos de perfil saem daqui: são da tela de perfil, duplicados na tela
+errada pelo designer. Gravar perfil e carteira na mesma submissão seria inventar
+comportamento que o desafio não pede — e o usuário já tem onde editá-los.
+
+`type` é **enum, não texto livre** — o Figma mostra um select ("Selecione uma
+carteira"). As opções não estão desenhadas; derivar das que o pagamento mobile
+oferece (spec 07 §6.4): `metamask`, `walletconnect`, `coinbase`. Isso amarra as duas
+telas: a carteira cadastrada aqui é a que aparece lá.
+
+`referralCode` é o único campo **opcional** dos dois que entram — o Figma marca com
+asterisco, mas código de indicação obrigatório trancaria o cadastro de quem não tem
+um. Renderizar sem asterisco e registrar o desvio no ARCHITECTURE.md.
+
+Ambos entram nas fixtures e ganham teste de contrato.
+
+✅ **DECIDIDO — criar `DELETE /api/wallets/:id`.** `src/mocks/handlers/wallets.ts`
+só tem GET, POST e PATCH. O usuário decidiu que o menu `⋮` oferece **Remover**.
+
+O menu `⋮` passa a ter três ações: **Definir como principal** (`PATCH` com
+`role: 'primary'`, já funciona), **Editar** (`PATCH`, já funciona) e **Remover**
+(`DELETE`, a criar).
+
+Regras do handler novo:
+
+- `404` se a carteira não existe ou não é do usuário da sessão
+- **não remover a última carteira `primary`** quando ela é a única da lista →
+  `409 conflict`, mensagem explicando. Sem primária o pagamento (spec 07 §6.3)
+  perde a carteira selecionada.
+- remover uma `primary` quando **existe** secundária: promover a mais antiga a
+  `primary` no mesmo request, e a UI avisa **qual** foi promovida. Promoção silenciosa
+  é a mesma armadilha do rebaixamento abaixo.
+- `persist()` ao fim, como os outros handlers
+
+Testes de contrato obrigatórios, e o do 409 precisa **falhar uma vez** antes de
+virar verde — regra do `CLAUDE.md`:
+
+1. remover secundária → 204, lista encurta
+2. remover a única primária → 409, lista intacta
+3. remover primária com secundária existente → 204 + secundária promovida
+4. remover carteira de outro usuário → 404 (isolamento, regra eliminatória 4)
+
+Na UI, remover pede **confirmação** — é destrutivo e irreversível.
 
 ⚠️ `POST /api/wallets` já devolve **409 em endereço duplicado** e rebaixa as outras
 a `secondary` quando entra uma `primary`. Os dois caminhos precisam de UI: o 409
