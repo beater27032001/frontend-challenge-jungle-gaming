@@ -38,3 +38,12 @@ export const RARITY_BADGES: Partial<Record<NftRarity, string>> = {
   epic: 'ÉPICO',
   legendary: 'LENDÁRIO',
 }
+
+// Fase 4 (specs/04-detalhe-nft.md, resolução OQ1): 3º atributo do detalhe —
+// capitalizado, distinto do `RARITY_BADGES` em caixa alta.
+export const RARITY_LABELS: Record<NftRarity, string> = {
+  common: 'Comum',
+  rare: 'Raro',
+  epic: 'Épico',
+  legendary: 'Lendário',
+}
