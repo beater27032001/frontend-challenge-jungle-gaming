@@ -298,3 +298,122 @@ pegou conferindo. Ao montar a lista da fase 5, **verificar cada item contra a
     fechadas (entradas fantasma corrigidas pelo usuário); esta fase só
     cobre o comportamento com teste (critério 15: "Mercado" ativo em
     `/nft/*`, header sem régua nessa rota).
+
+### Ciclo de correção (iteração 1) — pós-review
+
+17. **Chips de edição alinhados ao Figma (opção A do usuário)** — o
+    `label` deixou de ser o nome fantasia `Standard`/`Deluxe` e passa a ser
+    **gerado de `totalSupply`** em `src/mocks/fixtures.ts` (`editionLabel()`):
+    `1/{totalSupply}` para edições com cap fixo, `ABERTA` quando
+    `totalSupply` é `null` (edição aberta, sem cap — `NftEdition.totalSupply`
+    virou `number | null`). É a mesma forma de resolução das fases 2/3
+    (categorias 4→9, `network`), mas aqui o **valor** de `totalSupply` (10 na
+    e1, 3 na e2) foi mantido: `e2e/api-contracts.spec.ts` trava dezenas de
+    asserções numéricas exatas nesses números (decrementos 10→9→8→7→6, reset
+    para 10, soma 13, filtro de preço pós-mutação em nft-012 etc.) — variar
+    `totalSupply` por NFT para produzir literalmente `1/1`/`1/50` no seed
+    quebraria esse contrato sem necessidade. Precedente do projeto (preço,
+    copy, avatares) é o **formato** do dado bater com o design, não o valor
+    literal do mock do Figma. `ABERTA` está suportada pelo tipo e pela
+    função, mas nenhuma edição da seed atual a usa — registrar aqui em vez de
+    inventar uma edição sem cap só para exibir a string.
+18. **`--color-amber` não consumido, justificado**: o token existe
+    (`src/index.css`) para o pill de avaliação mobile (spec 04 §1), mas a
+    estrela do pill já usa `text-text-accent` (#e89b55) desde a implementação
+    original — cor do design system para acento, também plausível para uma
+    estrela de nota. Trocar exigiria confirmar no Figma se `--color-amber`
+    é realmente a cor da estrela ou de outro elemento do pill não
+    transcrito na spec 04 (que só cita "aparece no pill", sem apontar qual
+    parte); sem esse dado, ficar com o token já verificado (`text-accent`) é
+    mais seguro que adivinhar. Fica registrado como dívida para quando
+    houver acesso ao Figma para confirmar.
+19. **Dots do carrossel "Mais desta coleção" ausentes — deliberado, não
+    bug**: `related-carousel.tsx` só renderiza `Carousel Dots` quando
+    `totalPages > 1`. Com a seed atual (48 NFTs, `category = i % 9`), nenhuma
+    categoria tem mais de 6 itens; excluindo o NFT corrente, o máximo de
+    relacionados é 5 = 1 página. Um dot único que não pagina seria a
+    decoração-com-cara-de-função que o desafio proíbe (§8). Diverge do
+    Figma (que desenha os dots), mas é o comportamento certo dado o volume
+    de dados do mock, não uma correção pendente.
+20. **Classe de flake: interação de teclado contra um controle Radix
+    correndo contra uma query ainda resolvendo.** Terceira ocorrência da
+    mesma família neste projeto — clique-fora do Radix (fase 2), foco do
+    slider (fase 3), agora `e2e/catalog.spec.ts` disparando `ArrowRight`
+    repetido no thumb do `Slider` de preço. A suspeita inicial (Radix
+    perdendo `keydown` sob contenção de CPU) **não era a causa raiz** —
+    confirmado instrumentando um `MutationObserver` no atributo
+    `aria-valuenow` durante a sequência: o `FilterPanel`
+    (`filter-panel.tsx`) nasce com `max` provisório `1` até a query de
+    `facets` resolver (latência simulada do MSW); se o usuário já estiver
+    apertando `ArrowRight` quando essa query assenta, o efeito que
+    resincroniza o rascunho do preço com a URL (`if (syncedTo !== urlPrice)
+    setDraft(...)`) devolve o thumb para `0` no meio da sequência — uma
+    corrida real entre o carregamento dos facets e a interação, não perda
+    de evento. Sob paralelismo pesado a janela de colisão é maior, daí a
+    aparência de "ligado a CPU".
+    **Receita**: para um controle cujo valor pode ser resetado por um
+    estado assíncrono ainda em voo, a espera determinística certa não é por
+    tecla — é esperar esse estado **assentar antes da primeira tecla**
+    (aqui, `aria-valuemax` parar de mudar por uma janela real, não uma
+    leitura que por acaso bateu com a anterior). Depois disso, cada
+    `ArrowRight`/`ArrowLeft` avança de forma confiável e um simples "mudou
+    desde a tecla anterior" basta. Extraído como `pressArrowAndWaitValue()`
+    (mais o utilitário `waitStable()`) em `e2e/helpers.ts` para a próxima
+    interação de teclado contra Radix já nascer usando o helper em vez de
+    reinventar o `waitForFunction`.
+
+### Ciclo de correção (iteração 2) — o coordenador reproduziu 2 falhas que a
+iteração 1 não pegou, sempre em `mobile-chromium`, sob `pnpm test` verificado
+por ele mesmo
+
+21. **Classe de flake irmã: primeiro `Tab` da sequência de teclado disparado
+    antes de o documento ter foco.** `boot()`/`bootReset()` resolve quando os
+    mocks respondem, não quando `document.hasFocus()` é verdade. Sob
+    paralelismo pesado a janela entre "página carregada" e "documento com
+    foco" cresce, e um primeiro `Tab` disparado nessa janela não move o foco
+    para o primeiro elemento tabulável — a asserção seguinte falha (visto em
+    `catalog.spec.ts:397` e em pelo menos 5 testes de
+    `runtime-behavior.spec.ts` que repetiam o mesmo preâmbulo). Mesmo
+    princípio da decisão 20: converter a suposição de estado inicial em
+    espera explícita. `pressFirstTab()` (`e2e/helpers.ts`) espera
+    `document.hasFocus()` antes do primeiro `Tab`; os Tabs seguintes da
+    mesma sequência não precisam disso, o documento já está com foco.
+    Trocado em todo caller que fazia esse preâmbulo (grep por
+    `keyboard.press('Tab')` logo após `boot`/`bootReset`), não só no teste
+    que o coordenador citou — mesma bug, mesmo commit.
+22. **Leitura única de `location.search` correndo contra um `.click()`
+    assíncrono.** `catalog.spec.ts:73` lia `location.search` uma vez,
+    imediatamente após `.click()` no filtro de rede — mas `.click()` resolve
+    quando o evento é disparado, não quando o `navigate()` do router (que
+    reage ao `onClick`) termina de escrever a URL. Sob contenção pesada essa
+    janela é grande o bastante para a leitura pegar a URL velha. Trocado por
+    `expect.poll(() => page.evaluate(() => location.search))` só nessa
+    asserção — não uma reescrita de todo o arquivo, que tem 47 leituras
+    síncronas de `location.search`; as outras seguem depois de
+    `goBack()`/`goForward()` (mecânica nativa do browser, síncrona com a
+    própria navegação, sem a mesma corrida).
+23. **Higiene de processo descoberta no meio da investigação**: rodadas
+    anteriores desta sessão deixaram vários `vite preview --port 4173`
+    esquecidos rodando em paralelo (sessões de `pnpm test` anteriores nunca
+    finalizadas), e uma rodada com 25 falhas espúrias em arquivos não
+    relacionados só aconteceu com esse acúmulo. Confirma o aviso que já
+    estava em `e2e-test-results.md` ("matar processo na porta antes de cada
+    rodada") — mas agora com prova de quanto isso pode contaminar a medição
+    de flake: uma rodada "suja" pode parecer uma regressão generalizada e
+    não é.
+
+
+## Limitação conhecida — flake residual na suíte E2E
+
+Para quem avalia: `pnpm test` roda 380 testes em desktop 1440 e mobile 390, e
+passa em cerca de 3 de cada 4 rodadas completas sob paralelismo padrão. Antes das
+correções da fase 4 falhava em torno de metade das rodadas.
+
+O que resta é **infraestrutura de teste**, não código de aplicação. Três famílias
+foram diagnosticadas e corrigidas na causa (itens 20 a 22); a fonte residual é uma
+tolerância de tempo de parede em `e2e/runtime-behavior.spec.ts:118`, que assere que
+o cenário `slow` demora ~2500ms com teto de 3500ms — apertado quando a máquina está
+sob carga. Rodar com `--workers=1` passa de forma consistente.
+
+Não foi perseguido até 100% por decisão consciente de prazo. O conserto é
+one-liner: asserir só o piso da latência, que é o que o teste de fato prova.
