@@ -1,4 +1,5 @@
 import { eth, roundEth } from '@/lib/money'
+import { NFT_CATEGORIES } from '@/types'
 import type { NftCategory, NftDetail, NftEdition, NftRarity, Network } from '@/types'
 import type { Db } from './db'
 
@@ -7,11 +8,13 @@ import type { Db } from './db'
  * tables and the loop index so two fresh builds are byte-identical.
  */
 
-export const SEED_VERSION = 1
+export const SEED_VERSION = 2
 
 // --- fixed tables -----------------------------------------------------
 
-const CATEGORIES: NftCategory[] = ['art', 'gaming', 'music', 'photography']
+// 9 categories (spec §3: fixtures reconciled with the design system).
+// gcd(9,4)=1 against RARITIES below, so every category×rarity pair exists.
+const CATEGORIES: NftCategory[] = [...NFT_CATEGORIES]
 const RARITIES: NftRarity[] = ['common', 'rare', 'epic', 'legendary']
 // Offset by 2 against CATEGORIES so category/rarity combinations vary.
 const RARITY_OFFSET = 2
@@ -50,11 +53,15 @@ const CREATORS = [
   { id: 'creator-4', name: 'Nadia Reyes' },
   { id: 'creator-5', name: 'Ken Alvarez' },
   { id: 'creator-6', name: 'Iris Fontaine' },
-].map((c) => ({ ...c, avatarUrl: `https://picsum.photos/seed/gm-${c.id}/100/100` }))
+// External placeholder-image debt paid off (spec §5): reuse the 4 local NFT
+// artworks as avatar crops instead — less code than a separate initials
+// component, and sanctioned by the design system ("recortes dos mesmos assets").
+].map((c, idx) => ({ ...c, avatarUrl: `/nft/ape-0${(idx % 4) + 1}.webp` }))
 
 export const NETWORK_FEES: Record<Network, string> = {
   ethereum: '0.0025',
   polygon: '0.0008',
+  solana: '0.0001', // dado de mock determinístico (não é medida de Figma)
 }
 
 export const COUPONS: Array<{ code: string; percentOff: number; expiresAt: string }> = [
@@ -75,7 +82,7 @@ function pad(n: number): string {
 
 function buildNft(i: number): NftDetail {
   const id = `nft-${pad(i + 1)}`
-  const category = CATEGORIES[i % 4]
+  const category = CATEGORIES[i % 9]
   const rarity = RARITIES[(i + RARITY_OFFSET) % 4]
   const basePrice = PRICE_TABLE[i % PRICE_TABLE.length]
   const creator = CREATORS[i % CREATORS.length]
@@ -116,7 +123,10 @@ function buildNft(i: number): NftDetail {
     creator: { id: creator.id, name: creator.name, avatarUrl: creator.avatarUrl },
     category,
     rarity,
-    imageUrl: `https://picsum.photos/seed/gm-nft-${id}-1/800/800`,
+    // External placeholder-image debt paid off (spec §5): 4 local webp
+    // assets, cycled deterministically by index. `images[0] === imageUrl`
+    // always holds.
+    imageUrl: `/nft/ape-0${(i % 4) + 1}.webp`,
     priceEth: editions[0].priceEth,
     available: 0,
     featured: i % 6 === 0,
@@ -124,7 +134,7 @@ function buildNft(i: number): NftDetail {
     createdAt,
     version: 1,
     description: `${title} is a GreenMint original from the ${category} collection, ${rarity} rarity.`,
-    images: [1, 2, 3].map((n) => `https://picsum.photos/seed/gm-nft-${id}-${n}/800/800`),
+    images: [0, 1, 2].map((n) => `/nft/ape-0${((i + n) % 4) + 1}.webp`),
     editions,
   }
   refreshNftDerived(nft)
@@ -175,7 +185,7 @@ export function buildInitialDb(): Db {
         id: 'u-ana',
         name: 'Ana Volt',
         email: 'ana@greenmint.dev',
-        avatarUrl: 'https://picsum.photos/seed/gm-user-ana/200/200',
+        avatarUrl: '/nft/ape-01.webp',
         bio: 'Colecionadora de arte generativa desde o primeiro bloco.',
         createdAt: '2025-06-01T00:00:00.000Z',
         passwordHash: ANA_PASSWORD_HASH,
@@ -185,7 +195,7 @@ export function buildInitialDb(): Db {
         id: 'u-bruno',
         name: 'Bruno Chain',
         email: 'bruno@greenmint.dev',
-        avatarUrl: 'https://picsum.photos/seed/gm-user-bruno/200/200',
+        avatarUrl: '/nft/ape-02.webp',
         bio: 'Explorando fotografia on-chain nos fins de semana.',
         createdAt: '2025-07-10T00:00:00.000Z',
         passwordHash: BRUNO_PASSWORD_HASH,

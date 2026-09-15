@@ -2,7 +2,8 @@ import { z } from 'zod'
 
 /** Wallet contracts: one primary wallet max per user, enforced by handlers. */
 
-export type Network = 'ethereum' | 'polygon'
+export const NETWORKS = ['ethereum', 'polygon', 'solana'] as const
+export type Network = (typeof NETWORKS)[number]
 export type WalletRole = 'primary' | 'secondary'
 
 export interface Wallet {
@@ -17,7 +18,7 @@ export interface Wallet {
 export const walletSchema = z.object({
   label: z.string().min(1),
   address: z.string().regex(/^0x[a-fA-F0-9]{40}$/, 'endereço inválido'),
-  network: z.enum(['ethereum', 'polygon']),
+  network: z.enum(NETWORKS),
   role: z.enum(['primary', 'secondary']),
 })
 export type CreateWalletRequest = z.infer<typeof walletSchema>

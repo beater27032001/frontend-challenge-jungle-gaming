@@ -47,7 +47,7 @@ export const auth = [
         id,
         name: body.name,
         email: body.email,
-        avatarUrl: `https://picsum.photos/seed/gm-user-${id}/200/200`,
+        avatarUrl: '/nft/ape-01.webp', // local asset, spec §5
         bio: '',
         createdAt: new Date().toISOString(),
         passwordHash,
