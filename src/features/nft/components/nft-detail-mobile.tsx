@@ -197,7 +197,7 @@ export function NftDetailMobile(props: NftDetailViewProps) {
             </div>
           </div>
 
-          <span className="text-title-20 leading-[16px] font-bold text-text-accent">{totalPrice} ETH</span>
+          <span data-testid="nft-price" className="text-title-20 leading-[16px] font-bold text-text-accent">{totalPrice} ETH</span>
         </div>
 
         <div className="flex items-center gap-[12px]">

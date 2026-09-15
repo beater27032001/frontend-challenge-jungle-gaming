@@ -1,7 +1,10 @@
 import { LogIn, Search, ShoppingCart } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
 import { Link, useLocation, useNavigate, useSearch } from '@tanstack/react-router'
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { useSession } from '@/features/auth/use-session'
+import { cartOptions } from '@/features/cart/queries'
 import type { CatalogSearch } from '@/features/nft/search-params'
 import { cn, linkFocusRing } from '@/lib/utils'
 
@@ -34,6 +37,14 @@ export function Header({ withDivider = true }: { withDivider?: boolean }) {
   const [draft, setDraft] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
   const buttonRef = useRef<HTMLButtonElement>(null)
+
+  // Fase 9: o badge precisa de uma contagem real para que `nft.updated` tenha
+  // onde aparecer (§7, passo 3). A rota do carrinho é a fase 6 — o botão
+  // continua desabilitado, mas a contagem não é mais fictícia.
+  const session = useSession()
+  const scope = session.data?.user.id ?? 'guest'
+  const cart = useQuery({ ...cartOptions(scope), enabled: !session.isPending })
+  const cartCount = cart.data?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0
 
   useEffect(() => {
     if (open) inputRef.current?.focus()
@@ -135,11 +146,22 @@ export function Header({ withDivider = true }: { withDivider?: boolean }) {
             >
               <Search className="size-5" />
             </button>
-            <button type="button" disabled aria-label="Carrinho" className="relative disabled:opacity-50">
-              {/* fase 6 liga isto — contagem não é buscada nesta fase (sem
-                  query), então o badge (16x16, só com contagem > 0) nunca
-                  aparece aqui. */}
+            <button
+              type="button"
+              disabled
+              aria-label={cartCount > 0 ? `Carrinho, ${cartCount} item(ns)` : 'Carrinho'}
+              className="relative disabled:opacity-50"
+            >
+              {/* fase 6 liga a navegação; a contagem já é real (fase 9). */}
               <ShoppingCart className="size-6" />
+              {cartCount > 0 && (
+                <span
+                  data-testid="cart-count"
+                  className="absolute -right-2 -top-2 flex size-4 items-center justify-center rounded-full bg-primary text-tiny-9 font-bold text-primary-foreground"
+                >
+                  {cartCount}
+                </span>
+              )}
             </button>
             <Button disabled className="h-[35px] w-[100px] gap-1 text-body-16 text-primary-foreground">
               {/* fase 5 liga isto */}
