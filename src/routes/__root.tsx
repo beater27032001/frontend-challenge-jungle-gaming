@@ -1,4 +1,4 @@
-import { createRootRouteWithContext, Link, Outlet } from '@tanstack/react-router'
+import { createRootRouteWithContext, Link, Outlet, useLocation } from '@tanstack/react-router'
 import type { QueryClient } from '@tanstack/react-query'
 import { Footer } from '@/components/layout/footer'
 import { Header } from '@/components/layout/header'
@@ -23,6 +23,13 @@ export const Route = createRootRouteWithContext<RouterContext>()({
  * no nav drawer on mobile (ARCHITECTURE.md decisions 1–2).
  */
 function RootLayout() {
+  // Fase 4 (specs/04-detalhe-nft.md §4): o frame mobile do detalhe (`15:5536`)
+  // não tem MobileSearchBar nem TabBar — a Buy Bar fixa ocupa o fundo. O
+  // header desktop de telas de mercado é sem divisor (specs/02 §2, doc do
+  // componente).
+  const pathname = useLocation({ select: (l) => l.pathname })
+  const isNftDetail = pathname.startsWith('/nft/')
+
   return (
     <div className="min-h-dvh bg-background text-foreground">
       <a
@@ -31,15 +38,16 @@ function RootLayout() {
       >
         Pular para o conteúdo
       </a>
-      <Header />
-      <MobileSearchBar />
+      <Header withDivider={!isNftDetail} />
+      {!isNftDetail && <MobileSearchBar />}
       {/* pb-[126px] evita que a TabBar fixa encubra o fim do conteúdo em
-          telas < lg (critério 18); some em lg, onde não há TabBar. */}
-      <main id="main" className="pb-[126px] lg:pb-0">
+          telas < lg (critério 18); some em lg, onde não há TabBar. Em
+          /nft/* a Buy Bar (164px) ocupa esse lugar em vez da TabBar. */}
+      <main id="main" className={cn(isNftDetail ? 'pb-[164px]' : 'pb-[126px]', 'lg:pb-0')}>
         <Outlet />
       </main>
       <Footer />
-      <TabBar />
+      {!isNftDetail && <TabBar />}
       <Toaster theme="dark" />
     </div>
   )

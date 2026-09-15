@@ -23,9 +23,9 @@ export type NftSort = 'newest' | 'price-asc' | 'price-desc' | 'popular'
 
 export interface NftEdition {
   id: string // `${nftId}-e1`
-  label: string // "Standard" | "Deluxe"
+  label: string // "1/{totalSupply}" (ex.: "1/10") ou "ABERTA" quando totalSupply é null
   priceEth: EthAmount
-  totalSupply: number // inteiro
+  totalSupply: number | null // inteiro; null = edição aberta, sem cap fixo (chip "ABERTA")
   available: number // inteiro, 0 = esgotada
 }
 
@@ -47,8 +47,11 @@ export interface NftSummary {
 
 export interface NftDetail extends NftSummary {
   description: string
-  images: string[] // galeria, 3 por NFT
+  images: string[] // galeria, 4 por NFT; images[0] === imageUrl
   editions: NftEdition[]
+  ratingAvg: string // '3.5'…'5.0', 1 casa decimal
+  ratingCount: number
+  attributes: string[] // 3 itens, PT
 }
 
 export interface NftListParams {

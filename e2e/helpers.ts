@@ -122,3 +122,78 @@ export async function clearCart(page: Page): Promise<void> {
     await apiFetch(page, `/api/cart/items/${item.id}`, { method: 'DELETE' })
   }
 }
+
+/**
+ * Ciclo de correção fase 4 (ARCHITECTURE.md fase 4, decisão 20) — terceira
+ * ocorrência da mesma família de flake em torno de um Radix Slider (antes:
+ * clique-fora, foco). A causa raiz real, confirmada com um
+ * `MutationObserver` instrumentado (não só suposta pela CPU contenda): o
+ * `FilterPanel` inicia com `max` provisório `1` até a query de `facets`
+ * resolver; se o usuário já estiver apertando `ArrowRight` quando essa
+ * query assenta, o efeito que resincroniza o rascunho com a URL
+ * (`filter-panel.tsx`, `if (syncedTo !== urlPrice) setDraft(...)`) devolve o
+ * thumb para `0` no meio da sequência — não é o Radix perdendo `keydown`,
+ * é uma corrida real entre o carregamento dos facets e a interação. Sob
+ * paralelismo pesado essa janela cresce, daí a aparência de flake ligado a
+ * CPU.
+ *
+ * A espera determinística correta não é por tecla: é esperar o **bound do
+ * slider assentar** (deixar de ser o placeholder `1`, ou parar de mudar)
+ * antes da primeira tecla — depois disso não há mais corrida e cada
+ * `ArrowRight`/`ArrowLeft` avança de forma confiável.
+ */
+async function waitStable(
+  read: () => Promise<string | null>,
+  minStableMs = 300,
+  timeoutMs = 5000,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs
+  let last = await read()
+  let lastChangeAt = Date.now()
+  while (Date.now() < deadline) {
+    if (Date.now() - lastChangeAt >= minStableMs) return
+    await new Promise((r) => setTimeout(r, 50))
+    const current = await read()
+    if (current !== last) {
+      last = current
+      lastChangeAt = Date.now()
+    }
+  }
+  throw new Error(`value never stabilized (stuck changing): last read "${last}"`)
+}
+
+export async function pressArrowAndWaitValue(
+  thumb: import('@playwright/test').Locator,
+  key: 'ArrowRight' | 'ArrowLeft',
+  times: number,
+): Promise<void> {
+  // Espera o `aria-valuemax` (vem de `facets`, resolvido de forma
+  // assíncrona) parar de mudar de fato — 300ms sem alteração — antes de
+  // começar a apertar teclas, não só uma leitura que por acaso bateu com a
+  // anterior.
+  await waitStable(() => thumb.getAttribute('aria-valuemax'))
+
+  for (let i = 0; i < times; i++) {
+    const before = await thumb.getAttribute('aria-valuenow')
+    await thumb.press(key)
+    await expect.poll(() => thumb.getAttribute('aria-valuenow')).not.toBe(before)
+  }
+}
+
+/**
+ * Ciclo de correção fase 4 (iteração 2) — mesma família do `waitStable` do
+ * slider, aplicada ao primeiro `Tab` de uma sequência de navegação por
+ * teclado. `boot()`/`bootReset()` resolve quando os mocks respondem, não
+ * quando o DOCUMENTO tem foco; sob paralelismo pesado, o primeiro `Tab`
+ * pode disparar antes de `document.hasFocus()` ser verdade, e nesse caso o
+ * navegador não move o foco para o primeiro elemento tabulável — a
+ * asserção seguinte falha, mas o Tab em si nunca foi "perdido", só nunca
+ * teve efeito. Converte a suposição ("o documento já tem foco") em espera
+ * explícita antes do primeiro Tab da sequência; os Tabs seguintes não
+ * precisam disso, o documento já está com foco.
+ */
+export async function pressFirstTab(page: Page): Promise<void> {
+  await page.bringToFront()
+  await expect.poll(() => page.evaluate(() => document.hasFocus())).toBe(true)
+  await page.keyboard.press('Tab')
+}
