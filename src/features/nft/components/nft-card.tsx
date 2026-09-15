@@ -27,7 +27,7 @@ export function NftCard({ nft }: { nft: NftSummary }) {
         />
       </div>
       <p className="text-body-16 leading-[16px] text-foreground">{nft.title}</p>
-      <p className="text-body-18 leading-[16px] font-bold text-text-accent">{nft.priceEth} ETH</p>
+      <p data-testid="nft-price" className="text-body-18 leading-[16px] font-bold text-text-accent">{nft.priceEth} ETH</p>
     </Link>
   )
 }

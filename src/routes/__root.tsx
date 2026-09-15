@@ -5,6 +5,7 @@ import { Header } from '@/components/layout/header'
 import { MobileSearchBar } from '@/components/layout/mobile-search-bar'
 import { TabBar } from '@/components/layout/tab-bar'
 import { Toaster } from '@/components/ui/sonner'
+import { useRealtime } from '@/features/realtime/use-realtime'
 import { cn, linkFocusRing } from '@/lib/utils'
 
 export interface RouterContext {
@@ -29,6 +30,10 @@ function RootLayout() {
   // componente).
   const pathname = useLocation({ select: (l) => l.pathname })
   const isNftDetail = pathname.startsWith('/nft/')
+
+  // Fase 9: uma única conexão Socket.IO para o app inteiro, atrelada ao
+  // escopo do usuário. Ver src/features/realtime/use-realtime.ts.
+  useRealtime()
 
   return (
     <div className="min-h-dvh bg-background text-foreground">

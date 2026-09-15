@@ -109,7 +109,7 @@ export function NftDetailDesktop(props: NftDetailViewProps) {
           <div className="flex flex-1 flex-col justify-between">
             <div className="flex flex-col gap-3">
               <h1 className="text-heading-28 font-bold text-foreground">{nft.title}</h1>
-              <p className="text-title-22 leading-[16px] font-bold text-text-accent">{price} ETH</p>
+              <p data-testid="nft-price" className="text-title-22 leading-[16px] font-bold text-text-accent">{price} ETH</p>
 
               <div className="flex items-center gap-2">
                 <div
