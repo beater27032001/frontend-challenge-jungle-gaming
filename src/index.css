@@ -39,6 +39,20 @@
 
   /* Layout: Figma desktop frame is 1440 with a 1200 content column */
   --container-content: 75rem;
+
+  /* Skeleton shimmer (spec fase 2, Etapa 7): not a Figma value — loading
+   * states don't exist in the Figma file, this is a CHALLENGE §8 requirement.
+   * `prefers-reduced-motion` needs no extra code: the global media query
+   * below already freezes every animation, this one included. */
+  --animate-shimmer: shimmer 1.5s linear infinite;
+  @keyframes shimmer {
+    from {
+      transform: translateX(-100%);
+    }
+    to {
+      transform: translateX(100%);
+    }
+  }
 }
 
 /* ---------------------------------------------------------------------------
@@ -55,8 +69,10 @@
   --popover-foreground: var(--color-text-primary);
   --primary: var(--color-primary);
   --primary-foreground: var(--color-ink);
-  --secondary: var(--color-surface-dark);
-  --secondary-foreground: var(--color-text-primary);
+  /* Sem alias --secondary aqui: `--color-secondary` (#b39463, token "Color/Secondary"
+     do Figma) já ocupa o nome, então `bg-secondary` SEMPRE significa o bege da marca.
+     Para o marrom escuro use `bg-surface-dark` explicitamente. */
+  --secondary-foreground: var(--color-ink);
   --muted: var(--color-surface-dark);
   --muted-foreground: var(--color-text-secondary);
   --accent: var(--color-text-accent);
@@ -67,8 +83,8 @@
   --input: var(--color-border-soft);
   --ring: var(--color-primary);
 
-  /* ponytail: radius is provisional — calibrate per screen from get_design_context */
-  --radius: 0.5rem;
+  /* Calibrated (spec §1): 6px, measured on the Entrar/Aplicar buttons. */
+  --radius: 0.375rem;
 }
 
 @theme inline {

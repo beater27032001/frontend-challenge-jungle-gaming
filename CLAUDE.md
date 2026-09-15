@@ -131,5 +131,13 @@ original. Toda branch nova, inclusive as que o `/pipeline` cria por fase, sai de
 
 **Commits:** sem trailer `Co-Authored-By`.
 
+**Entrega por PR (da fase 2 em diante):** branch da fase → commit com OK do
+usuário → `git push -u origin feat/fase-N-...` → `gh pr create --base dev`, com a
+descrição montada a partir dos handoffs do pipeline. Nunca mergear local.
+As fases 0 e 1 foram mergeadas localmente, antes desta decisão.
+
+**Cuidado:** o VS Code empurra para `origin` automaticamente após cada commit.
+Commit feito é commit publicado — não há janela para `git reset` sem force-push.
+
 **Ao fim de cada ponto, pare e peça validação do usuário antes de commitar.**
 Não commite por conta própria.

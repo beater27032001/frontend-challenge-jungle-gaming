@@ -1,6 +1,7 @@
 import { http, HttpResponse } from 'msw'
 import { z } from 'zod'
 import { eth } from '@/lib/money'
+import { NFT_CATEGORIES } from '@/types'
 import type { NftDetail, NftSummary, Paginated } from '@/types'
 import { db } from '../db'
 import { activeScenario, withScenario } from '../scenarios'
@@ -15,7 +16,7 @@ const boolParam = z
 
 const listParamsSchema = z.object({
   q: z.string().optional(),
-  category: z.enum(['art', 'gaming', 'music', 'photography']).optional(),
+  category: z.enum(NFT_CATEGORIES).optional(),
   rarity: z.enum(['common', 'rare', 'epic', 'legendary']).optional(),
   priceMin: z.string().optional(),
   priceMax: z.string().optional(),
