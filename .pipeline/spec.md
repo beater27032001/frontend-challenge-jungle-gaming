@@ -1,38 +1,21 @@
 # Spec: Fase 4 — Detalhes do NFT
 
-> Fonte de verdade visual: `specs/04-detalhe-nft.md` (complementada por
-> `specs/02-design-system.md` e `specs/03-catalogo.md`). Ninguém neste pipeline
-> tem acesso ao Figma — **nenhuma medida, cor ou copy pode ser inventada**. Tudo
-> que falta está em Open Questions. Ler também CLAUDE.md §"Verificação — o
-> instrumento erra mais que o código" antes de testar qualquer coisa.
+> Fonte de verdade visual: `specs/04-detalhe-nft.md` (236 linhas, incluindo a
+> seção "Resolução das Open Questions do Planner" no fim — ler inteira),
+> complementada por `specs/02-design-system.md` e `specs/03-catalogo.md`.
+> Ninguém neste pipeline tem acesso ao Figma — **nenhuma medida, cor ou copy
+> pode ser inventada**. Ler também CLAUDE.md §"Verificação — o instrumento
+> erra mais que o código" antes de testar qualquer coisa.
 
 ## Open Questions
 
-Todas são pedidos de extração do Figma (desktop `10:244`, mobile `15:5536`) —
-nenhuma é decisão de produto. Sem elas as partes marcadas `[OQ-n]` abaixo não
-podem ser implementadas com fidelidade.
+None.
 
-1. **Cards do carrossel "Mais desta coleção"** (desktop, `Frame 204`,
-   1200×347): largura/altura do card, tamanho e raio da arte, tipografia de
-   título e preço, gaps internos, passo horizontal, quantos cards visíveis por
-   página; e o grupo `Carousel Dots` (52×12): quantos pontos, diâmetro e gap.
-   Confirmar também a copy exata do `Section Heading` (assumo "Mais desta
-   coleção" até prova em contrário).
-2. **Ícone de 30×30 sobreposto em `left-[530px] top-[15px]`** da coluna de
-   imagens desktop: qual é o glifo e qual a função (zoom? favorito?
-   compartilhar?). Sem saber a função, não dá para dar comportamento honesto.
-3. **Chips de edição** (desktop §2 e mobile §4.2): a transcrição dá altura 28,
-   larguras, gaps e tipografia, mas **não diz se o chip tem borda, fundo ou
-   raio** de container, nem padding. É texto puro ou é uma "pílula"?
-4. **Pontos do carrossel do hero mobile** (grupo 56×7 em `left-[179px]
-   top-[365px]`): quantos pontos, diâmetro de cada um e gap. (Os grupos
-   análogos do catálogo eram 3×8px/gap 8 e 3×7px/gap 6; 56×7 não fecha com
-   nenhuma combinação inteira óbvia — preciso do valor real.)
-5. **Ritmo vertical e stepper desktop**: (a) distância do header ao topo do
-   bloco Product no frame 1440; (b) gap entre o bloco Product e o `Section
-   Heading` de "Mais desta coleção"; (c) gap entre `Frame 204`/dots e o
-   footer; (d) tamanho do glifo +/− dentro dos botões 33×49,5 do stepper
-   desktop (o mobile transcreve "ícone 16px", o desktop não).
+(As 5 da primeira versão foram resolvidas pelo usuário e transcritas em
+`specs/04-detalhe-nft.md` §3 e §"Resolução das Open Questions": cards do
+carrossel, lupa 30×30, chips-elipse, pontos do hero mobile, ritmo vertical +
+glifo do stepper. A resolução também revelou um **breadcrumb "Início /
+Mercado"** não transcrito antes — incorporado abaixo.)
 
 ## Goal
 
@@ -45,21 +28,21 @@ ao carrinho via API (o carrinho-tela é fase 6). Favoritar fica **desabilitado**
 nesta fase (decisão já tomada — favoritos exigem sessão, fase 5; a atualização
 otimista com rollback do §4 vai junto). A fase também quita dívidas do
 `ARCHITECTURE.md` que vencem aqui (consolidação dos 3 specs E2E de catálogo,
-prop morta, flake de Tab, entradas obsoletas da lista de dívidas) e deixa
-pronto para a fase 5: botões de favorito posicionados por design, `scope` nas
-query keys do detalhe e carrinho de guest que o handler já mescla no login.
+prop morta, flake de Tab) e deixa pronto para a fase 5: botões de favorito
+posicionados por design, `scope` nas query keys do detalhe e carrinho de guest
+que o handler já mescla no login.
 
 ## Files to create / modify
 
 **Criar:**
 
 - `src/features/nft/components/nft-detail-desktop.tsx` — composição desktop
-  completa (bloco Product: galeria + coluna de detalhes), `hidden lg:flex`.
+  completa (breadcrumb + bloco Product: galeria + coluna de detalhes),
+  `hidden lg:*`.
 - `src/features/nft/components/nft-detail-mobile.tsx` — composição mobile
   (Hero + Details Sheet + Buy Bar), `lg:hidden`.
 - `src/features/nft/components/related-carousel.tsx` — "Mais desta coleção",
-  desktop-only (o frame mobile não tem a seção). Estrutura e dados agora;
-  medidas internas dependem de `[OQ-1]`.
+  desktop-only (o frame mobile não tem a seção).
 - `src/features/cart/use-add-to-cart.ts` — mutation `POST /cart/items` +
   toasts. Primeiro arquivo do domínio cart; a fase 6 o reutiliza.
 - `e2e/nft-detail.spec.ts` — spec E2E do domínio detalhe (desktop + mobile).
@@ -112,13 +95,10 @@ query keys do detalhe e carrinho de guest que o handler já mescla no login.
   (linha ~149, mantendo `images[0] === imageUrl`), e cobrir os campos novos
   (`ratingAvg`/`ratingCount`/`attributes`) no teste de contrato do detalhe.
 - `ARCHITECTURE.md` — seção "Fase 4" com as decisões listadas em "Registro em
-  ARCHITECTURE.md" abaixo, mais a manutenção da lista de dívidas: itens 6
-  (header) e 9 (slider `bg-white`) da lista "Dívidas para a fase 4" estão
-  **obsoletos** — ambos já foram fechados na fase 3 (o próprio arquivo diz
-  isso no item 11 da seção Fase 3; `header.tsx:17-21` e `slider.tsx` conferem
-  no código). Corrigir a lista, adicionar a cross-ref do zoom (dívida 5) na
-  decisão 2 da fase 2, e registrar a aceitação do `aria-current` do footer
-  (dívida 3) como decisão consciente.
+  ARCHITECTURE.md" abaixo. (As entradas obsoletas das dívidas 6 e 9 já foram
+  corrigidas pelo usuário — não retrabalhar; registrar apenas a aceitação do
+  `aria-current` do footer (dívida 3) e a cross-ref do zoom (dívida 5), se o
+  usuário ainda não as tiver adicionado.)
 
 **Mudanças de fixture (`src/mocks/fixtures.ts`)** — todas determinísticas,
 zero PRNG, `SEED_VERSION = 4`:
@@ -213,41 +193,58 @@ Regras do estado de compra (na rota):
   fica na mesma linha do stepper). Decisão registrada em ARCHITECTURE — o
   Figma só mostra números estáticos.
 
-### Mapeamento visual — desktop (spec 04 §2, tudo transcrito)
+### Mapeamento visual — desktop (spec 04 §2, §3, OQ2/3/5)
 
-Bloco Product na coluna de 1200: duas colunas, `gap-[32px]`, altura 448.
-Posição vertical na página: `[OQ-5]`.
+Ritmo vertical (resolução OQ5): entre o fim do header (h 45) e o topo de
+`Main` (y=77 do container `Top`) há uma faixa de **32px** onde vive o
+**breadcrumb** de 145×16; o bloco Product começa a **28px** do topo de `Main`.
+Implementar como: breadcrumb com 8px acima e 8px abaixo (8+16+8=32 —
+distribuição interna não transcrita, provisória com `ponytail:`), Product com
+`mt-[28px]`. O offset de 24px do container `Top` acima do header é margem do
+frame, não aplicada (o shell compartilhado não a tem em rota nenhuma —
+registrar em ARCHITECTURE).
 
-- Coluna de imagens (573, `gap-[28px]`): coluna de thumbnails de 100px com
+- **Breadcrumb "Início / Mercado"** (145×16, achado da resolução OQ5):
+  `<nav aria-label="Trilha de navegação">` com lista — "Início" é `<Link
+  to="/">` (preserva `linkFocusRing`), separador "/", "Mercado" é o item
+  atual: **texto, não link**, com `aria-current="page"`. Tipografia não
+  transcrita além da caixa de 145×16 → 15px regular provisório, link em
+  `text-text-secondary`, atual em `text-foreground`, com `ponytail:` e
+  registro em ARCHITECTURE (extração fina pendente).
+- **Bloco Product**: duas colunas na coluna de 1200, `gap-[32px]`, altura 448.
+- **Coluna de imagens** (573, `gap-[28px]`): coluna de thumbnails de 100px com
   `gap-[16px]` — 4 botões 100×100 `rounded-[8px]` sobre placas
   `bg-surface-card` `rounded-[6px]`; o selecionado com borda 1px `primary` +
   `aria-current="true"`. Imagem principal 444×444 `bg-surface-card`
   `rounded-[6px]` `p-[16px]` com a arte 404×404 `rounded-[24px]`
-  (`src = images[imageIndex]`, `alt = nft.title`). Ícone 30×30 sobreposto:
-  `[OQ-2]`.
-- Coluna de detalhes (`flex-1 justify-between`): título 28px bold
+  (`src = images[imageIndex]`, `alt = nft.title`).
+- **Lupa** (resolução OQ2): botão circular 30×30 em `left-[530px] top-[15px]`
+  sobre a imagem principal — `bg-surface-raised`, borda 1px `border-strong`,
+  glifo de lupa (lucide `Search`/`ZoomIn`), `aria-label="Ampliar imagem"`.
+  **Comportamento honesto**: abre um `Dialog` (primitivo já existente e
+  exercitado) com a imagem corrente (`images[imageIndex]`) em tamanho maior,
+  `rounded-[24px]`, `alt = nft.title`; Esc fecha, foco controlado pelo Radix.
+  Nunca clicável-e-decorativo.
+- **Coluna de detalhes** (`flex-1 justify-between`): título 28px bold
   (`text-heading-28`, `text-foreground`); preço 22px bold `leading-[16px]`
   `text-text-accent` (`text-title-22`); avaliação — `Math.floor(ratingAvg)`
   estrelas 15px preenchidas + vazias até 5 (lucide `Star`, preenchida via
   `fill="currentColor"`), `aria-hidden`, num container com
   `aria-label={`Avaliação: ${ratingAvg} de 5, ${ratingCount} avaliações`}`,
-  seguido do texto `${ratingCount} avaliações de colecionadores` 15px;
-  régua 1px de 573; "Sobre este NFT:" 15px bold `leading-[16px]` + descrição
-  14px `leading-[24px]` `text-text-secondary` (#cfb28c) largura 574;
-  "Edição:" 15px bold + chips (altura 28, `gap-[6px]`, largura por conteúdo,
-  selecionado `text-text-accent` medium, demais `text-secondary`-#cfb28c…
-  **atenção**: no vocabulário dos specs, "`text-secondary`" = token
-  `--color-text-secondary` #cfb28c = classe `text-text-secondary`; container
-  do chip: `[OQ-3]`); stepper — botões 33×49,5 `bg-primary` `rounded-[33px]`
-  borda 1px `#140d0a` `drop-shadow-[0_6.6px_9.9px_rgba(20,13,10,0.15)]`,
-  número 20px `leading-[28px]` (`text-title-20`), `gap-[12px]`, glifo
-  `[OQ-5d]`; COMPRAR 130×40 `bg-primary` `rounded-[6px]` 14px bold
-  `leading-[20px]` `text-ink`; Favoritar 130×40 borda 1px `primary`
-  `rounded-[6px]` coração 20px + 14px medium `text-text-accent` `gap-[8px]`,
-  **`disabled`** (fase 5 liga); metadados 15px `gap-[12px]` em
-  `text-secondary` (#b39463 — o spec 04 diz "`secondary`", não
-  "`text-secondary`"): `ID do token: #NNNN` (derivado do id: `nft-042` →
-  `#0042`), `Coleção: {CATEGORY_LABELS[category]}`,
+  seguido de `${ratingCount} avaliações de colecionadores` 15px; régua 1px de
+  573; "Sobre este NFT:" 15px bold `leading-[16px]` + descrição 14px
+  `leading-[24px]` `text-text-secondary` (#cfb28c) largura 574; "Edição:"
+  15px bold + **chips-elipse** (ver abaixo) com `gap-[6px]`; stepper — botões
+  33×49,5 `bg-primary` `rounded-[33px]` borda 1px `#140d0a`
+  `drop-shadow-[0_6.6px_9.9px_rgba(20,13,10,0.15)]`, glifo +/− de **26,4px**
+  (resolução OQ5; lucide `Plus`/`Minus` `size-[26.4px]`), número 20px
+  `leading-[28px]` (`text-title-20`), `gap-[12px]`; COMPRAR 130×40
+  `bg-primary` `rounded-[6px]` 14px bold `leading-[20px]` `text-ink`;
+  Favoritar 130×40 borda 1px `primary` `rounded-[6px]` coração 20px + 14px
+  medium `text-text-accent` `gap-[8px]`, **`disabled`** (fase 5 liga);
+  metadados 15px `gap-[12px]` em `text-secondary` (#b39463 — o spec 04 diz
+  "`secondary`", não "`text-secondary`"): `ID do token: #NNNN` (derivado do
+  id: `nft-042` → `#0042`), `Coleção: {CATEGORY_LABELS[category]}`,
   `Atributos: {attributes.join(', ')}`; "Compartilhar este NFT:" 15px bold +
   3 links-ícone `gap-[8px]` (LinkedIn 15×14,4 · mensagem 18 · Twitter
   16×12,2) — comportamento honesto sem backend: `<a target="_blank"
@@ -256,7 +253,37 @@ Posição vertical na página: `[OQ-5]`.
   `aria-label` de cada rede; glifos genéricos do lucide v1 com `ponytail:`
   (mesmo precedente dos ícones sociais do footer, ARCHITECTURE fase 2 §3).
 
-### Mapeamento visual — mobile (spec 04 §4, três camadas)
+**Chips de edição** (resolução OQ3 — vale para desktop e mobile): altura 28,
+**elipse inscrita na caixa**, i.e. `border-radius: 50%` — **não**
+`rounded-full`, que num chip de 66×28 vira stadium (lados retos), outra forma.
+Traço 1px, **sem preenchimento**: não selecionado em `border-strong`
+(#3f2319), selecionado em `primary` (#d28a4c). Texto 14px: selecionado
+`text-text-accent` medium, demais `text-text-secondary` regular. Largura por
+conteúdo com padding horizontal para inscrever o texto na elipse (`px-4`
+provisório, `ponytail:`). Semântica: **radios nativos** (`<input
+type="radio" name="edition">` `sr-only` + `<label>` estilizado) — cobre o
+`role="radio"`/`aria-checked` pedido pela resolução OQ3 com teclado de graça;
+esgotada = `disabled` + sufixo acessível "(esgotada)" (sr-only) +
+`opacity-50`.
+
+**"Mais desta coleção"** (resolução OQ1, spec 04 §3): `Section Heading`
+1200×28 com título **"Mais desta coleção"** e régua ao lado; `Frame 204`
+1200×347 com **5 cards visíveis, `justify-between`**; cada card `flex-col
+gap-[12px]`: placa **219×255 `bg-surface-card` sem raio**, arte **212×212
+`rounded-[13px]` centralizada** `object-cover`, título 15px regular
+`text-foreground`, preço 16px bold `leading-[16px]` `text-text-accent`.
+**Padronização deliberada**: o Figma varia paddings e alterna raio 11/13 entre
+os cards — não replicar; 219×255/212/13 é o valor de 4 dos 5 cards. Registrar
+o desvio em ARCHITECTURE (o spec 04 §3 manda). Dados: itens da mesma
+`category` via API, excluindo o NFT atual; cada card é `<Link>` para o
+detalhe (padrão `nft-card.tsx`). Dots 52×12 centralizados, `gap-[32px]`
+abaixo dos cards: paginam de 5 em 5; composição interna do grupo não
+verificada no SVG → espelhar provisoriamente a composição verificada do hero
+mobile (ativo = pill, inativos = círculos, tudo `primary`), com `ponytail:` e
+registro em ARCHITECTURE; cada dot é `<button>` com `aria-label={`Página
+${n}`}` e `aria-current` — o ativo muda de **forma**, não só de cor.
+
+### Mapeamento visual — mobile (spec 04 §4, OQ3/4)
 
 Container fluido (390–<1024), medidas do frame 414 aplicadas como transcritas,
 larguras internas fluidas como no resto do app.
@@ -269,10 +296,15 @@ larguras internas fluidas como no resto do app.
   `router.history.back()` : `navigate({ to: '/' })` — hook verificado no
   pacote instalado v1.170) e coração 16×14,2 centralizado, **`disabled`**
   (fase 5); arte h-356 `rounded-[24px]` `object-cover`
-  (`src = images[imageIndex]`, `alt = nft.title`); pontos do carrossel sob a
-  arte (`[OQ-4]`) — **funcionais**: um botão por imagem da galeria,
-  `aria-label={`Imagem ${n} de 4`}`, `aria-current` no ativo (diferente dos
-  pontos decorativos do catálogo: aqui existem 4 imagens reais).
+  (`src = images[imageIndex]`, `alt = nft.title`).
+- **Pontos do carrossel** (resolução OQ4) sob a arte (grupo 56×7 centrado):
+  **funcionais**, um botão por imagem da galeria (4) — o **ativo é um pill de
+  28×7 (`rx 3.5`)**, os inativos são **círculos de 7px (`r=3.5`)**, todos em
+  `primary`, gaps de 7. O estado muda de **forma**, o que já satisfaz o §8
+  sozinho; ainda assim cada botão leva `aria-label={`Imagem ${n} de 4`}` e
+  `aria-current` no ativo. Área de toque ≥24px via padding transparente
+  (visual permanece 7px). **Não** copiar esta composição para os heroes do
+  catálogo — lá os SVGs não foram verificados (aviso da resolução OQ4).
 - **Details Sheet**: sobrepõe o hero a partir de y=392 → `-mt-[114px]`
   relativo (506−392), `bg-surface-card` `rounded-t-[31px]` `pt-[32px]
   pb-[24px] px-[24px]` `flex-col gap-[12px]`; título 20px bold
@@ -283,9 +315,9 @@ larguras internas fluidas como no resto do app.
   `text-text-secondary` com **`line-clamp-3`** (altura 71 do frame ≈ 3 linhas
   de 24px — é a mesma descrição da API, clampada; a copy mobile mais curta do
   Figma é o clamp, não outro dado); "Edição:" 15px bold, gap 8 até os chips,
-  chips com **`gap-[12px]`** (não 6); Token Info = os 3 metadados do desktop,
-  15px `gap-[12px]` em `text-secondary` (#b39463). Padding-bottom extra para
-  o conteúdo não morrer sob a Buy Bar fixa (164px).
+  chips-elipse (OQ3) com **`gap-[12px]`** (não 6); Token Info = os 3
+  metadados do desktop, 15px `gap-[12px]` em `text-secondary` (#b39463).
+  Padding-bottom extra para o conteúdo não morrer sob a Buy Bar fixa (164px).
 - **Buy Bar**: `fixed bottom-0 inset-x-0` (o `<main>` compensa com
   `pb-[164px]`, ver `__root.tsx`), `bg-surface-card` `rounded-t-[40px]`
   `pt-[20px] pb-[36px] px-[24px]` `drop-shadow-[0_0_10px_rgba(10,6,4,0.45)]`,
@@ -314,24 +346,20 @@ larguras internas fluidas como no resto do app.
   início" (`linkFocusRing`). Renderizado dentro da rota, sem redirect.
 - **Erro transitório** (5xx/rede): mensagem + botão "Tentar novamente" que
   chama `refetch()` — mesmo padrão do estado de erro do `catalog-grid.tsx`.
-- **Esgotado** (nft-013): chips todos `disabled` com sufixo acessível
-  "(esgotada)" (`sr-only` ou visível — ver `[OQ-3]` para o visual do chip),
+- **Esgotado** (nft-013): chips todos `disabled` com "(esgotada)" acessível,
   stepper e COMPRAR/"Comprar NFT" `disabled`, e texto de status "Esgotado"
   15px `text-text-secondary` junto ao CTA, com `role="status"`.
 
 ### Semântica e teclado
 
-- Chips de edição: **radios nativos** (`<input type="radio" name="edition">`
-  `sr-only` + `<label>` estilizado) — seleção única com teclado de graça;
-  esgotada = `disabled`. Estado selecionado nunca só por cor: peso medium
-  (transcrito) + o próprio `:checked` exposto por `aria`/foco + indicação de
-  `[OQ-3]` se houver.
-- Thumbnails/pontos da galeria: `<button>` com `aria-label` e
-  `aria-current`; selecionado = borda `primary` (presença de borda, não só
-  cor) no desktop.
+- Chips: radios nativos (ver acima) — seleção única com teclado de graça.
+- Thumbnails/pontos da galeria e dots do carrossel: `<button>` com
+  `aria-label` e `aria-current`; selecionado nunca só por cor (borda no
+  desktop, forma no mobile).
 - Stepper: botões `aria-label="Diminuir quantidade"`/"Aumentar quantidade";
   o número num elemento com `aria-live="polite"` (`Quantidade: N` via
   `aria-label` ou texto sr-only).
+- Lupa → Dialog: foco preso e devolvido pelo Radix; Esc fecha.
 - Toasts do sonner (Toaster já montado no `__root`) para sucesso/erro da
   mutation — feedback acessível de mutation, padrão já aceito.
 - Foco visível em tudo (`linkFocusRing` / `focus-visible` dos primitivos).
@@ -370,40 +398,49 @@ larguras internas fluidas como no resto do app.
     imagem principal para `images[N]`; a selecionada tem `aria-current="true"`
     e borda `primary`; as thumbnails são alcançáveis e acionáveis por teclado
     (Tab + Enter/Space) com foco visível.
-11. Galeria mobile: os pontos sob a arte trocam a imagem do hero e expõem
-    `aria-current`; um botão por imagem (4).
-12. Favoritar desktop (130×40) e o coração do hero mobile estão `disabled` e
+11. Galeria mobile: os 4 pontos sob a arte trocam a imagem do hero; o ativo é
+    o pill 28×7 e expõe `aria-current`; os inativos são círculos de 7px.
+12. Lupa desktop: clicar abre um Dialog com a imagem corrente ampliada
+    (`src === images[imageIndex]`); Esc fecha e o foco volta ao botão da
+    lupa; nunca é clicável sem efeito.
+13. Breadcrumb desktop em `/nft/*`: `<nav>` com "Início" como link real para
+    `/` e "Mercado" como item atual com `aria-current="page"` que **não** é
+    link.
+14. Favoritar desktop (130×40) e o coração do hero mobile estão `disabled` e
     **nenhum request** é disparado ao cliká-los (interceptação Playwright
     comprova zero chamadas).
-13. Header desktop em `/nft/nft-001`: "Mercado" tem `aria-current="page"` e
+15. Header desktop em `/nft/nft-001`: "Mercado" tem `aria-current="page"` e
     "Início" **não** tem; o header renderiza **sem** a régua (`border-b`)
     nas rotas `/nft/*` e **com** régua em `/`; numa rota 404 nenhum item de
     nav fica ativo.
-14. Em viewport mobile (390) na rota de detalhe: `MobileSearchBar` e `TabBar`
+16. Em viewport mobile (390) na rota de detalhe: `MobileSearchBar` e `TabBar`
     não estão no DOM; a Buy Bar está fixa no fundo; em `/` ambas continuam
     presentes. Sem overflow horizontal em 390, 768 e 1440 no detalhe.
-15. `src/index.css` contém os 5 tokens novos com os valores exatos do spec 04
+17. `src/index.css` contém os 5 tokens novos com os valores exatos do spec 04
     §1; o título desktop usa 28px, o mobile 20px, o preço desktop 22px
     (computed style confere).
-16. "Mais desta coleção" (desktop) lista apenas NFTs da mesma `category` do
-    NFT corrente, sem incluir o próprio; clicar um card navega para o detalhe
-    dele (URL muda para `/nft/<id>`). *(Medidas visuais: após resolução de
-    `[OQ-1]`.)*
-17. Skeleton do detalhe aparece sob cenário de latência e preserva dimensões
+18. Chips de edição: computed style com `border-radius: 50%` (elipse, não
+    stadium), traço 1px `#d28a4c` no selecionado e `#3f2319` nos demais, sem
+    background; semântica de radio (`role`/`checked` conferíveis).
+19. "Mais desta coleção" (desktop): 5 cards visíveis da mesma `category`,
+    sem incluir o NFT corrente; placa 219×255 sem raio, arte com
+    `border-radius` 13px; clicar um card navega para `/nft/<id>` dele; os
+    dots paginam e o ativo se distingue por forma + `aria-current`.
+20. Skeleton do detalhe aparece sob cenário de latência e preserva dimensões
     (mesma técnica de asserção do catálogo — sem layout shift do bloco
     principal).
-18. Contrato: `GET /api/nfts/nft-001` responde `images` com 4 itens
+21. Contrato: `GET /api/nfts/nft-001` responde `images` com 4 itens
     (`images[0] === imageUrl`), `ratingAvg` string com 1 decimal,
     `ratingCount` number, `attributes` com 3 strings PT; `seedVersion` é 4.
-19. E2E consolidado: `e2e/` contém `api-contracts.spec.ts`,
+22. E2E consolidado: `e2e/` contém `api-contracts.spec.ts`,
     `runtime-behavior.spec.ts`, `catalog.spec.ts`, `nft-detail.spec.ts` e
     `helpers.ts` — `catalog-tester.spec.ts` e `catalog-e2e-tester.spec.ts`
     não existem mais e **nenhum teste foi perdido na fusão** (os 326 seguem
     verdes, apenas realocados/ajustados onde a fixture mudou, precedente
     ARCHITECTURE fase 3 item 14).
-20. O flake do preâmbulo de Tabs (ex-`catalog.spec.ts:387-391`) agora assere o
+23. O flake do preâmbulo de Tabs (ex-`catalog.spec.ts:387-391`) agora assere o
     foco após **cada** Tab, não só no fim.
-21. `pnpm build`, `pnpm typecheck`, `pnpm lint` e `pnpm test` passam.
+24. `pnpm build`, `pnpm typecheck`, `pnpm lint` e `pnpm test` passam.
 
 ## Edge cases to cover
 
@@ -420,10 +457,15 @@ larguras internas fluidas como no resto do app.
 - Duplo clique rápido em COMPRAR: botão `disabled` enquanto `isBuying` — no
   máximo um POST por clique intencional.
 - Cenário `slow`/latência: skeleton; cenário de erro: retry recupera.
+- Related com menos de 5 itens na categoria (após excluir o atual): renderiza
+  os que existem, sem dots se couber numa página; related não pode quebrar no
+  cenário `empty`.
 - Voltar (mobile): com histórico → volta preservando a URL do catálogo
   (filtros intactos); acesso direto (sem histórico) → vai para `/`.
 - Teclado de ponta a ponta no fluxo de compra desktop: Tab até chips →
   seleção por setas/Espaço → stepper → COMPRAR por Enter.
+- Dialog da lupa: `scrollY` lido com dialog Radix aberto é 0 por construção —
+  medir depois de fechar (CLAUDE.md §Verificação).
 - `prefers-reduced-motion`: já global; nenhum shimmer/transição nova pode
   contornar o media query.
 - Zero regressão nos cenários existentes do catálogo (fusão E2E é
@@ -445,7 +487,9 @@ larguras internas fluidas como no resto do app.
 - **REST**: só via `src/lib/api.ts`; a mutation segue o shape do handler
   `src/mocks/handlers/cart.ts` (`POST /api/cart/items`, 409
   `availability_conflict` com `details.available`).
-- **Placeholders de glifo**: comentário `ponytail:` + registro em
+- **Dialog**: primitivo `src/components/ui/dialog.tsx`, já adaptado e
+  exercitado.
+- **Placeholders de glifo/medida fina**: comentário `ponytail:` + registro em
   ARCHITECTURE, como no FAB da tab bar e nos ícones sociais do footer.
 - **Toasts**: `Toaster` já montado em `__root.tsx`; usar `toast` do `sonner`.
 - **E2E**: `e2e/helpers.ts` (`boot`, `awaitMswReady`, `setScenario`);
@@ -466,7 +510,9 @@ larguras internas fluidas como no resto do app.
 4. Preço no detalhe: desktop = unitário da edição selecionada; Buy Bar mobile
    = unitário × quantidade (big.js). O Figma só mostra números estáticos.
 5. Pontos do hero mobile do detalhe são **funcionais** (4 imagens reais na
-   galeria), ao contrário dos decorativos do catálogo (decisão 7 da fase 3).
+   galeria), ao contrário dos decorativos do catálogo (decisão 7 da fase 3);
+   composição pill-ativo + círculos verificada no SVG — não extrapolada para
+   os heroes do catálogo.
 6. Em `/nft/*` mobile não há MobileSearchBar nem TabBar (frame `15:5536`); a
    Buy Bar ocupa o fundo. Header desktop de telas de mercado sem divisor
    (doc do componente, spec 02 §2).
@@ -477,19 +523,35 @@ larguras internas fluidas como no resto do app.
    linhas de 24px no frame).
 9. Estado "esgotado" e demais estados não desenhados seguem o padrão visual
    (CHALLENGE §1).
-10. Manutenção da lista de dívidas: 6 e 9 já estavam fechadas pela fase 3
-    (entradas obsoletas corrigidas); dívida 3 (footer `aria-current` por match
-    parcial) aceita e registrada; dívida 5 (cross-ref do zoom) adicionada.
+10. Carrossel "Mais desta coleção" **padronizado deliberadamente** (placa
+    219×255, arte 212×212 `rounded-[13px]`): o Figma varia paddings e alterna
+    raio 11/13 entre os 5 cards — inconsistência do arquivo, não intenção de
+    design (spec 04 §3 manda registrar).
+11. Lupa da imagem principal = Dialog com a imagem ampliada — comportamento
+    honesto para um affordance de zoom desenhado sem estado aberto no Figma.
+12. Provisórios com `ponytail:` (extração fina pendente): tipografia e
+    distribuição vertical do breadcrumb (só a caixa 145×16 foi extraída);
+    padding horizontal dos chips-elipse; composição interna dos dots do
+    carrossel desktop (52×12 — espelha a composição verificada do hero mobile
+    até extração). O offset de 24px do container `Top` acima do header não é
+    aplicado (margem do frame; o shell compartilhado não a tem em nenhuma
+    rota).
+13. Dívida 3 (footer `aria-current` por match parcial): aceita como decisão
+    consciente; dívida 5: cross-ref do zoom adicionada à decisão 2 da fase 2
+    — ambas só se ainda não constarem (o usuário já corrigiu as entradas
+    obsoletas 6 e 9).
 
 ## Prototype / design reference
 
 Sem acesso ao Figma neste pipeline. Referência única:
-`specs/04-detalhe-nft.md` (medidas, cores, copy — desktop `10:244`, mobile
-`15:5536`), complementada por `specs/02-design-system.md` (header/footer,
-primitivos, tokens) e `specs/03-catalogo.md` (cards, labels). O modo frontend
-do E2E valida estilo contra os valores transcritos nesses arquivos (ex.:
-título 28px bold, Buy Bar `rounded-t-[40px]`, stepper mobile 20×30, gradiente
-do hero `137.64deg #241612→#2f1d15`).
+`specs/04-detalhe-nft.md` (236 linhas — medidas, cores, copy e a seção
+"Resolução das Open Questions" com os valores extraídos dos SVGs; desktop
+`10:244`, mobile `15:5536`), complementada por `specs/02-design-system.md` e
+`specs/03-catalogo.md`. O modo frontend do E2E valida estilo contra os
+valores transcritos (ex.: título 28px bold, chips `border-radius: 50%` com
+traço `#d28a4c`/`#3f2319`, Buy Bar `rounded-t-[40px]`, pill ativo 28×7 dos
+pontos mobile, placa 219×255 do carrossel, gradiente do hero
+`137.64deg #241612→#2f1d15`).
 
 ## Out of scope
 
@@ -504,11 +566,12 @@ do hero `137.64deg #241612→#2f1d15`).
   (variantes do badge) — nenhum consumidor desta fase aciona os primitivos
   Card/Badge no detalhe, mesmo critério das fases anteriores; 11 (botão de
   filtro mobile não-fixo) — fiel ao Figma, observação de UX, não dívida
-  técnica. **Atenção**: as dívidas 6 (header) e 9 (slider) da lista "para a
-  fase 4" NÃO são trabalho desta fase — já foram fechadas na fase 3
-  (conferido no código: `header.tsx:17-21` usa igualdade exata + prefixo
-  `/nft`; `slider.tsx` já usa `primary`/`border-soft`); aqui só se corrige o
-  registro obsoleto e se cobre o comportamento com o teste do critério 13.
-- Nenhuma dependência nova; nenhum carrossel-lib (o related pagina com
-  botões/dots próprios após `[OQ-1]`).
+  técnica. As dívidas 6 (header) e 9 (slider) **não são trabalho desta
+  fase** — já estavam fechadas pela fase 3 e o usuário já corrigiu as
+  entradas obsoletas no ARCHITECTURE.md; aqui só se cobre o comportamento com
+  o teste do critério 15.
+- Replicar a composição pill+círculos nos pontos dos heroes do catálogo —
+  aqueles SVGs não foram verificados (aviso explícito da resolução OQ4).
+- Nenhuma dependência nova; nenhuma lib de carrossel (paginação por dots
+  próprios).
 - Seção editorial/promocional: continua fora (decisão 13 da fase 3).
