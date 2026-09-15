@@ -929,7 +929,7 @@ test.describe('Fix Plan (iteration 2): NftSummary derived fields stay coherent',
     return item
   }
 
-  test('seed remains unchanged: fresh reset top-level fields match the known fixture values, SEED_VERSION stays 3', async ({
+  test('seed remains unchanged: fresh reset top-level fields match the known fixture values, SEED_VERSION is 5', async ({
     page,
   }) => {
     await bootReset(page)
@@ -948,8 +948,11 @@ test.describe('Fix Plan (iteration 2): NftSummary derived fields stay coherent',
     // ratingCount/attributes added, specs/04-detalhe-nft.md §1) — the spec's
     // own "mapa de impacto" claim that no test asserts `seedVersion` missed
     // this one; updated, not deleted (same precedent as the fase-2/3
-    // fixture test updates).
-    expect(dbDump.seedVersion).toBe(4)
+    // fixture test updates). Fase 4, ciclo de correção (review item 1,
+    // opção A): bumps once more to 5 — `editions[].label` passa a ser
+    // gerado de `totalSupply` (`1/{totalSupply}`/`ABERTA`) em vez do nome
+    // fantasia "Standard"/"Deluxe" (ARCHITECTURE.md fase 4 decisão 17).
+    expect(dbDump.seedVersion).toBe(5)
   })
 
   test('sold-out: top-level `available` (not just editions[0]) drops to 0 on both detail and list, and never contradicts editions', async ({

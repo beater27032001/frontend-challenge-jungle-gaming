@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { awaitMswReady, boot, isExpectedBootNoise } from './helpers'
+import { awaitMswReady, boot, isExpectedBootNoise, pressFirstTab } from './helpers'
 
 /**
  * Phase 1 runtime checks: things only observable against the real running
@@ -594,7 +594,7 @@ test.describe('Accessibility — keyboard navigation and focus (criterion 24)', 
     await page.setViewportSize({ width: 1440, height: 900 })
     await boot(page)
 
-    await page.keyboard.press('Tab')
+    await pressFirstTab(page)
     await expect(page.getByRole('link', { name: 'Pular para o conteúdo' })).toBeFocused()
 
     await page.keyboard.press('Tab')
@@ -626,7 +626,7 @@ test.describe('Accessibility — keyboard navigation and focus (criterion 24)', 
     await page.setViewportSize({ width: 390, height: 844 })
     await boot(page)
 
-    await page.keyboard.press('Tab')
+    await pressFirstTab(page)
     await expect(page.getByRole('link', { name: 'Pular para o conteúdo' })).toBeFocused()
 
     // Fase 3: busca e filtro da MobileSearchBar deixam de ser disabled — são
@@ -971,7 +971,7 @@ test.describe('plain <Link> elements render the --ring token on focus-visible (f
     await page.setViewportSize({ width: 1440, height: 900 })
     await boot(page)
 
-    await page.keyboard.press('Tab') // skip-link
+    await pressFirstTab(page) // skip-link
     await page.keyboard.press('Tab') // KURIO wordmark
     const wordmarkStyle = await page.evaluate(() => {
       const cs = getComputedStyle(document.activeElement!)
@@ -1184,7 +1184,7 @@ test.describe('Focus ring on plain <Link> does not clip or overlap neighbouring 
     await page.setViewportSize({ width: 1440, height: 900 })
     await boot(page)
 
-    await page.keyboard.press('Tab') // skip-link
+    await pressFirstTab(page) // skip-link
     await page.keyboard.press('Tab') // wordmark
     const wordmarkOverflowChain = await page.evaluate(() => {
       const chain: string[] = []
@@ -1354,7 +1354,7 @@ test.describe('Full breakpoint round-trip (fix iteration 1 regression): 1440 -> 
     await page.setViewportSize({ width: 1440, height: 900 })
     await boot(page)
 
-    await page.keyboard.press('Tab') // skip-link
+    await pressFirstTab(page) // skip-link
     await page.keyboard.press('Tab') // wordmark
     await expect(page.getByRole('link', { name: 'KURIO' }).first()).toBeFocused()
     await page.keyboard.press('Tab') // Início
