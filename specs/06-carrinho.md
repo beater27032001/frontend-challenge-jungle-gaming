@@ -80,8 +80,101 @@ conflito de disponibilidade e a matemática de subtotal/desconto/taxa/total.
 
 `useAddToCart` já existe da fase 4.
 
-## 6. Pendência de extração
+## 6. Mobile — `16:360` (414×896)
 
-`[EXTRAÇÃO PENDENTE]` o mobile (`16:360`) não foi extraído. Nas quatro fases
-anteriores o mobile **nunca** foi o desktop reescalado — não derivar por analogia;
-pedir extração antes de implementar.
+Extraído. Duas camadas empilhadas, **não é o desktop reescalado**: a tabela de 5
+colunas desaparece por completo e dá lugar a cards.
+
+### 6.1 Estrutura da tela
+
+| Camada | Node | Geometria |
+| --- | --- | --- |
+| Content | `70397:239` | `x 0, y 32, 414×518` |
+| Payment Summary | `70397:245` | `x 0, y 554, 414×342` |
+
+O Payment Summary é a folha inferior fixa, irmã do Content — mesmo padrão da Buy
+Bar da fase 4, mas com **raio 40 só no topo** (`rounded-t-[40px]`), fundo
+`surface-card` e padding `pt-24 px-24 pb-36`.
+
+### 6.2 Screen Header — `70397:240` (358×44, x 28)
+
+- Botão voltar: círculo 35×35 em `x 0, y 0`, ícone `Arrow-Left 2` 20×20 em `+7,+7`.
+  Mesmo componente do header mobile da fase 4.
+- Título "Carrinho de NFTs": `x 96, y 9`, **20px bold, lh 16**.
+
+### 6.3 Cart Items — `70397:241` (358 largura, gap 20)
+
+Cada item é um card `358×100`, `bg #241612`, **raio 14**, sombra
+`0 6px 20px rgba(10,6,4,0.45)`. Layout absoluto no Figma; em código é grid.
+
+| Elemento | Posição | Estilo |
+| --- | --- | --- |
+| Thumb | `x 0, y 0, 100×100` | raio 14 só à esquerda (`rounded-l-[14px]`) |
+| Título | `x 109, y 13` | 15px bold, lh 16, `foreground` |
+| Edição | `x 109, y 35` | 14px regular, lh 16, `text-secondary` — copy `Edição: 1/50` |
+| Preço | `x 109, y 69` | **18px bold, lh 16, `text-accent`** |
+| Stepper | `x 261, y 38` | ver 6.4 |
+| Lixeira | `x 313, y 42, 24×24` | `Iconly/Curved/Delete`, **só no item 3** |
+
+⚠️ A thumb aparece duplicada no Figma (`Rectangle 106` + uma cópia
+`mix-blend-multiply` deslocada 1–2px). É artefato de composição do designer para
+escurecer a imagem, **não** dois elementos. Em código: uma `<img>` só.
+
+⚠️ O ícone de lixeira existe em **um** dos quatro cards (`Item 3`, o único com
+quantidade 2 selecionada). Não é regra de negócio do desenho — é o designer
+mostrando o estado. **Implementar remover em todos os itens**; §3 exige remoção.
+
+### 6.4 Stepper do card (81×29, origem `x 261, y 38`)
+
+| Parte | Offset relativo | Estilo |
+| --- | --- | --- |
+| Botão `−` | `+0, +0, 24×24` | `Group 65`/`Group 72` — SVG circular, mesma moldura do `+` |
+| Quantidade | `+37, +7` | 16px regular, **lh 22**, `foreground` |
+| Botão `+` | `+57, +0, 24×24` | círculo raio 31, `bg surface-raised`, borda `border` |
+| Glifo `+` | `+62.9, +5` | 21px regular, `foreground` |
+
+Os botões são 24×24 — **abaixo do alvo de toque de 44px**. Envolver em área
+clicável de 44px com `::before`/padding negativo sem mover o visual, ou o
+requisito de acessibilidade mobile cai.
+
+### 6.5 Payment Summary — `70397:245`
+
+`flex-col justify-between`, então o bloco de valores fica no topo e o CTA colado
+no fundo dos 342px.
+
+**Promo Input — `70397:246`** (largura total, `h-50`, raio 40, `bg surface-card`,
+borda `border`, `drop-shadow 0 6px 10px rgba(10,6,4,0.45)`, `pl-16`):
+
+- placeholder "Digite o código promocional…" — **13px regular, lh 22**, `secondary`
+- botão "Aplicar": `97×50`, raio 40, 15px bold, `foreground`,
+  gradiente `96.02deg, rgba(210,138,76,0.54) 0.94% → #d28a4c 105%`
+
+**Linhas de valor** (gap 12, todas `justify-between`, largura total):
+
+| Linha | Label | Valor |
+| --- | --- | --- |
+| Subtotal | 15px regular, `foreground` | 16px regular, lh 16, direita |
+| Desconto do lançamento | 15px regular | `(-) 00.00`, 15px regular |
+| Taxa de rede | 15px regular | 0.016 ETH, 16px regular + legenda |
+| Total | **16px bold** | **18px bold, `text-accent`** |
+
+A linha de Taxa de rede é `flex-col items-end`: a linha label/valor, e abaixo
+dela, alinhada à direita, a legenda "Taxa estimada" em **12px regular, lh 16,
+`text-accent`**.
+
+**Checkout Button — `70397:251`**: largura total, `h-60`, raio 40, texto
+"Conectar e finalizar" 16px bold em `ink`, gradiente
+`108.86deg, #d28a4c 3.96% → rgba(210,138,76,0.8) 121.97%`.
+
+⚠️ Dois gradientes distintos (96.02deg no Aplicar, 108.86deg no CTA) — transcritos
+como estão. Se forem normalizados num token, registrar no ARCHITECTURE.md.
+
+⚠️ **Copy divergente**: o CTA mobile diz "Conectar e finalizar" e o desktop também.
+Mas a ação não conecta carteira nenhuma nesta fase — leva ao checkout (fase 7).
+Manter a copy do Figma e não fingir conexão.
+
+### 6.6 Tokens
+
+Verificado em `src/index.css`: `--text-caption-13` (linha 42) e `--text-caption-12`
+(linha 41) **já existem**. `--text-title-21`, usado pelo glifo `+` do stepper, não
+existe — criar nesta fase.
