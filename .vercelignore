@@ -1,0 +1,11 @@
+node_modules
+dist
+test-results
+playwright-report
+blob-report
+.pipeline
+e2e
+specs
+docs
+*.md
+!README.md
