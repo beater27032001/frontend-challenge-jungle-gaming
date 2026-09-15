@@ -1,8 +1,9 @@
 import { keepPreviousData, queryOptions } from '@tanstack/react-query'
+import { isAxiosError } from 'axios'
 import { api } from '@/lib/api'
 import { eth } from '@/lib/money'
 import { NETWORKS, NFT_CATEGORIES } from '@/types'
-import type { Network, NftCategory, NftListParams, NftSummary, Paginated } from '@/types'
+import type { Network, NftCategory, NftDetail, NftListParams, NftSummary, Paginated } from '@/types'
 
 /**
  * `queryOptions()` (TanStack Query v5) so the same key/fn/config is shared
@@ -20,6 +21,19 @@ export function nftListOptions(scope: string, params: NftListParams) {
     // o refetch (o cenário `out-of-order` prova que o request obsoleto é
     // cancelado via `signal`, não que o dado antigo nunca aparece).
     placeholderData: keepPreviousData,
+  })
+}
+
+/**
+ * Fase 4 (specs/04-detalhe-nft.md). 404 é resposta final, não falha
+ * transitória — não gastar o retry padrão do Query nela; qualquer outro
+ * erro ganha uma tentativa extra.
+ */
+export function nftDetailOptions(scope: string, nftId: string) {
+  return queryOptions({
+    queryKey: ['nfts', scope, 'detail', nftId] as const,
+    queryFn: async ({ signal }) => (await api.get<NftDetail>(`/nfts/${nftId}`, { signal })).data,
+    retry: (count, error) => !(isAxiosError(error) && error.response?.status === 404) && count < 1,
   })
 }
 

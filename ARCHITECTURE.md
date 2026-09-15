@@ -193,14 +193,23 @@ Achados `[minor]` da revisão da fase 3 mais o que sobrou da fase 2, num só lug
 
 **Herdadas da fase 2, ainda abertas:**
 
-6. `src/components/layout/header.tsx` — `pathname.startsWith('/')` marca
-   "Início" ativo em qualquer rota, inclusive 404. A tabela de prefixos cresce
-   na fase 4 (detalhe do NFT), então o conserto vence aqui.
+6. ~~`src/components/layout/header.tsx` — `pathname.startsWith('/')`~~
+   **JÁ FECHADA na fase 3.** `header.tsx:17-21` usa igualdade exata para `/` e
+   prefixo `/nft` para "Mercado". Entrada obsoleta: montei esta lista a partir
+   dos achados do Reviewer sem conferir se a fase 3 já os tinha resolvido. A
+   fase 4 só cobre o comportamento com teste.
 7. `src/index.css` — sombreamento de `--color-foreground` sobre o alias
    `--foreground`, mesma armadilha da colisão `--secondary` já corrigida.
 8. `src/components/ui/card.tsx` — `rounded-xl` (10px) fora do raio de sistema.
-9. `src/components/ui/slider.tsx` — thumb `bg-white`, fora da paleta.
+9. ~~`src/components/ui/slider.tsx` — thumb `bg-white`~~ **JÁ FECHADA na
+   fase 3.** O thumb usa `primary` e o trilho inativo `border-soft`. Mesma
+   origem do erro do item 6.
 10. `src/components/ui/badge.tsx` — variantes não usadas; podar ou justificar.
+
+**Nota sobre esta lista:** duas entradas (6 e 9) nasceram obsoletas porque eu
+as copiei dos achados do Reviewer sem verificar o código. O Planner da fase 4
+pegou conferindo. Ao montar a lista da fase 5, **verificar cada item contra a
+árvore antes de registrar** — dívida fantasma custa tempo de quem for quitá-la.
 
 **Observação de design, não dívida técnica:**
 
@@ -208,3 +217,203 @@ Achados `[minor]` da revisão da fase 3 mais o que sobrou da fase 2, num só lug
     Para filtrar no meio da lista o usuário precisa rolar até o topo. Está
     **fiel ao Figma**, que não mostra barra fixa — mas é fricção real, e vale
     reconsiderar se a fidelidade permitir.
+
+
+## Fase 4 — Detalhes do NFT
+
+1. **Favoritar desabilitado nesta fase** — favoritos exigem sessão (fase 5);
+   a atualização otimista com rollback (specs/04-detalhe-nft.md §4) entra
+   junto dos favoritos reais, não aqui. O botão desktop (130×40) e o coração
+   do hero mobile existem, posicionados por design, `disabled`.
+2. **`ratingAvg`/`ratingCount`/`attributes` entram em `NftDetail`** (mesmo
+   racional da resolução `network` da fase 3): o design exibe avaliação e
+   atributos e o modelo não tinha o dado. Fixture determinística
+   (`src/mocks/fixtures.ts`), zero PRNG. `SEED_VERSION` 3→4; `images` 3→4
+   (o desktop tem 4 thumbnails, `10:244`).
+3. **"Coleção" nos metadados do detalhe = rótulo PT da `category`** — o
+   produto já chama categorias de "Coleções" no filtro e no footer;
+   "Kurio Apes" no Figma é conteúdo de exemplo, não um campo novo.
+4. **Preço no detalhe**: desktop mostra o preço unitário da edição
+   selecionada; a Buy Bar mobile mostra `mulQty(priceEth, quantity)`
+   (`src/lib/money.ts`, big.js). O Figma só desenha números estáticos —
+   decisão de qual multiplicar registrada aqui, não inventada no componente.
+5. **Pontos do hero mobile do detalhe são funcionais** (4 imagens reais na
+   galeria), ao contrário dos decorativos do hero do catálogo (decisão 7 da
+   fase 3): a composição pill-ativo + círculos foi verificada no SVG
+   exportado (resolução OQ4 do Planner) só para este hero — **não**
+   extrapolada para os heroes do catálogo, cujos SVGs não foram lidos.
+6. **Em `/nft/*` mobile não há `MobileSearchBar` nem `TabBar`** (frame
+   `15:5536` não as desenha); a Buy Bar fixa ocupa o fundo, e o `<main>`
+   troca `pb-[126px]` por `pb-[164px]` nessas rotas (`__root.tsx`, via
+   `useLocation`). O header desktop de telas de mercado é sem divisor
+   (`withDivider={false}`, doc do componente, specs/02-design-system.md §2).
+7. **Compartilhar = links reais de share** (LinkedIn/mailto/Twitter intent)
+   em nova aba — comportamento coerente sem aparentar um recurso inexistente.
+   Glifos lucide genéricos provisórios (`Link2`/`Mail`/`AtSign` — lucide v1
+   não distribui ícones de marca), mesmo precedente dos ícones sociais do
+   footer (decisão 3 da fase 2).
+8. **Descrição mobile = a mesma descrição da API com `line-clamp-3`** (71px
+   ≈ 3 linhas de 24px no frame) — não um texto mais curto separado; a copy
+   mobile "mais curta" do Figma é o efeito do clamp, não outro dado.
+9. **Estado "esgotado" e demais estados não desenhados** (skeleton/404/erro
+   transitório) seguem o padrão visual já estabelecido nas fases 2/3
+   (CHALLENGE §1), sem frame próprio no Figma para copiar.
+10. **Carrossel "Mais desta coleção" padronizado deliberadamente** (placa
+    219×255 sem raio, arte 212×212 `rounded-[13px]` centralizada): o Figma
+    varia paddings e alterna raio 11/13 entre os 5 cards — inconsistência do
+    arquivo, não intenção de design (specs/04-detalhe-nft.md §3 mandou
+    registrar o desvio).
+11. **Lupa da imagem principal = Dialog com a imagem ampliada** — comportamento
+    honesto para um affordance de zoom desenhado sem estado aberto no Figma
+    (resolução OQ2 do Planner). Cross-ref: mesmo critério de "zoom" da
+    decisão 2 da fase 2 (equivalência funcional, não decorativa).
+12. **Provisórios com `ponytail:` (extração fina pendente):**
+    - tipografia e distribuição vertical do breadcrumb "Início / Mercado"
+      (só a caixa 145×16 foi extraída do frame `10:244`, resolução OQ5);
+    - padding horizontal (`px-4`) dos chips-elipse de edição (resolução OQ3);
+    - composição interna dos dots do carrossel desktop "Mais desta coleção"
+      (52×12 — espelha, até extração, a composição verificada do hero mobile:
+      pill ativo + círculos, resolução OQ4; **não** vale para os heroes do
+      catálogo, cujos SVGs não foram lidos).
+    - O offset de 24px do container `Top` acima do header (frame `10:244`)
+      não é aplicado: é margem do frame, e o shell compartilhado não a tem
+      em nenhuma rota.
+13. **Dívida 3 da fase 3 (footer `aria-current` por match parcial) aceita
+    como decisão consciente** — nunca há dois links de coleção simultâneos
+    ativos, e "coleção corrente" é semântica defensável para o match
+    parcial. **Dívida 5 da fase 3**: esta entrada 11 acima é a cross-ref
+    pendente, ligando o zoom do detalhe à decisão 2 da fase 2.
+14. **Dívida 4 da fase 3 fechada**: `catalog-tester.spec.ts` e
+    `catalog-e2e-tester.spec.ts` fundidos em `e2e/catalog.spec.ts` como
+    `describe`s — nenhum teste perdido, mesmo movimento da fase 2 (specs/02
+    §6). **Dívida 1 fechada**: o preâmbulo de Tabs do teclado agora assere o
+    foco após cada Tab, não só no fim.
+15. **Teste herdado da fase 3 ajustado, não deletado**: `catalog.spec.ts`
+    ("MobileSearchBar submit from /nft/$nftId...") assumia que a busca
+    inline funcionava em qualquer rota fora do catálogo — `/nft/*` era a
+    única rota assim e a decisão 6 desta fase a removeu de lá. Reescrito
+    para a asserção negativa (a barra realmente não existe nessa rota);
+    `e2e/nft-detail.spec.ts` cobre o resto do critério 16.
+16. **Dívidas 6 e 9 da fase 2/3 não são trabalho desta fase** — já estavam
+    fechadas (entradas fantasma corrigidas pelo usuário); esta fase só
+    cobre o comportamento com teste (critério 15: "Mercado" ativo em
+    `/nft/*`, header sem régua nessa rota).
+
+### Ciclo de correção (iteração 1) — pós-review
+
+17. **Chips de edição alinhados ao Figma (opção A do usuário)** — o
+    `label` deixou de ser o nome fantasia `Standard`/`Deluxe` e passa a ser
+    **gerado de `totalSupply`** em `src/mocks/fixtures.ts` (`editionLabel()`):
+    `1/{totalSupply}` para edições com cap fixo, `ABERTA` quando
+    `totalSupply` é `null` (edição aberta, sem cap — `NftEdition.totalSupply`
+    virou `number | null`). É a mesma forma de resolução das fases 2/3
+    (categorias 4→9, `network`), mas aqui o **valor** de `totalSupply` (10 na
+    e1, 3 na e2) foi mantido: `e2e/api-contracts.spec.ts` trava dezenas de
+    asserções numéricas exatas nesses números (decrementos 10→9→8→7→6, reset
+    para 10, soma 13, filtro de preço pós-mutação em nft-012 etc.) — variar
+    `totalSupply` por NFT para produzir literalmente `1/1`/`1/50` no seed
+    quebraria esse contrato sem necessidade. Precedente do projeto (preço,
+    copy, avatares) é o **formato** do dado bater com o design, não o valor
+    literal do mock do Figma. `ABERTA` está suportada pelo tipo e pela
+    função, mas nenhuma edição da seed atual a usa — registrar aqui em vez de
+    inventar uma edição sem cap só para exibir a string.
+18. **`--color-amber` não consumido, justificado**: o token existe
+    (`src/index.css`) para o pill de avaliação mobile (spec 04 §1), mas a
+    estrela do pill já usa `text-text-accent` (#e89b55) desde a implementação
+    original — cor do design system para acento, também plausível para uma
+    estrela de nota. Trocar exigiria confirmar no Figma se `--color-amber`
+    é realmente a cor da estrela ou de outro elemento do pill não
+    transcrito na spec 04 (que só cita "aparece no pill", sem apontar qual
+    parte); sem esse dado, ficar com o token já verificado (`text-accent`) é
+    mais seguro que adivinhar. Fica registrado como dívida para quando
+    houver acesso ao Figma para confirmar.
+19. **Dots do carrossel "Mais desta coleção" ausentes — deliberado, não
+    bug**: `related-carousel.tsx` só renderiza `Carousel Dots` quando
+    `totalPages > 1`. Com a seed atual (48 NFTs, `category = i % 9`), nenhuma
+    categoria tem mais de 6 itens; excluindo o NFT corrente, o máximo de
+    relacionados é 5 = 1 página. Um dot único que não pagina seria a
+    decoração-com-cara-de-função que o desafio proíbe (§8). Diverge do
+    Figma (que desenha os dots), mas é o comportamento certo dado o volume
+    de dados do mock, não uma correção pendente.
+20. **Classe de flake: interação de teclado contra um controle Radix
+    correndo contra uma query ainda resolvendo.** Terceira ocorrência da
+    mesma família neste projeto — clique-fora do Radix (fase 2), foco do
+    slider (fase 3), agora `e2e/catalog.spec.ts` disparando `ArrowRight`
+    repetido no thumb do `Slider` de preço. A suspeita inicial (Radix
+    perdendo `keydown` sob contenção de CPU) **não era a causa raiz** —
+    confirmado instrumentando um `MutationObserver` no atributo
+    `aria-valuenow` durante a sequência: o `FilterPanel`
+    (`filter-panel.tsx`) nasce com `max` provisório `1` até a query de
+    `facets` resolver (latência simulada do MSW); se o usuário já estiver
+    apertando `ArrowRight` quando essa query assenta, o efeito que
+    resincroniza o rascunho do preço com a URL (`if (syncedTo !== urlPrice)
+    setDraft(...)`) devolve o thumb para `0` no meio da sequência — uma
+    corrida real entre o carregamento dos facets e a interação, não perda
+    de evento. Sob paralelismo pesado a janela de colisão é maior, daí a
+    aparência de "ligado a CPU".
+    **Receita**: para um controle cujo valor pode ser resetado por um
+    estado assíncrono ainda em voo, a espera determinística certa não é por
+    tecla — é esperar esse estado **assentar antes da primeira tecla**
+    (aqui, `aria-valuemax` parar de mudar por uma janela real, não uma
+    leitura que por acaso bateu com a anterior). Depois disso, cada
+    `ArrowRight`/`ArrowLeft` avança de forma confiável e um simples "mudou
+    desde a tecla anterior" basta. Extraído como `pressArrowAndWaitValue()`
+    (mais o utilitário `waitStable()`) em `e2e/helpers.ts` para a próxima
+    interação de teclado contra Radix já nascer usando o helper em vez de
+    reinventar o `waitForFunction`.
+
+### Ciclo de correção (iteração 2) — o coordenador reproduziu 2 falhas que a
+iteração 1 não pegou, sempre em `mobile-chromium`, sob `pnpm test` verificado
+por ele mesmo
+
+21. **Classe de flake irmã: primeiro `Tab` da sequência de teclado disparado
+    antes de o documento ter foco.** `boot()`/`bootReset()` resolve quando os
+    mocks respondem, não quando `document.hasFocus()` é verdade. Sob
+    paralelismo pesado a janela entre "página carregada" e "documento com
+    foco" cresce, e um primeiro `Tab` disparado nessa janela não move o foco
+    para o primeiro elemento tabulável — a asserção seguinte falha (visto em
+    `catalog.spec.ts:397` e em pelo menos 5 testes de
+    `runtime-behavior.spec.ts` que repetiam o mesmo preâmbulo). Mesmo
+    princípio da decisão 20: converter a suposição de estado inicial em
+    espera explícita. `pressFirstTab()` (`e2e/helpers.ts`) espera
+    `document.hasFocus()` antes do primeiro `Tab`; os Tabs seguintes da
+    mesma sequência não precisam disso, o documento já está com foco.
+    Trocado em todo caller que fazia esse preâmbulo (grep por
+    `keyboard.press('Tab')` logo após `boot`/`bootReset`), não só no teste
+    que o coordenador citou — mesma bug, mesmo commit.
+22. **Leitura única de `location.search` correndo contra um `.click()`
+    assíncrono.** `catalog.spec.ts:73` lia `location.search` uma vez,
+    imediatamente após `.click()` no filtro de rede — mas `.click()` resolve
+    quando o evento é disparado, não quando o `navigate()` do router (que
+    reage ao `onClick`) termina de escrever a URL. Sob contenção pesada essa
+    janela é grande o bastante para a leitura pegar a URL velha. Trocado por
+    `expect.poll(() => page.evaluate(() => location.search))` só nessa
+    asserção — não uma reescrita de todo o arquivo, que tem 47 leituras
+    síncronas de `location.search`; as outras seguem depois de
+    `goBack()`/`goForward()` (mecânica nativa do browser, síncrona com a
+    própria navegação, sem a mesma corrida).
+23. **Higiene de processo descoberta no meio da investigação**: rodadas
+    anteriores desta sessão deixaram vários `vite preview --port 4173`
+    esquecidos rodando em paralelo (sessões de `pnpm test` anteriores nunca
+    finalizadas), e uma rodada com 25 falhas espúrias em arquivos não
+    relacionados só aconteceu com esse acúmulo. Confirma o aviso que já
+    estava em `e2e-test-results.md` ("matar processo na porta antes de cada
+    rodada") — mas agora com prova de quanto isso pode contaminar a medição
+    de flake: uma rodada "suja" pode parecer uma regressão generalizada e
+    não é.
+
+
+## Limitação conhecida — flake residual na suíte E2E
+
+Para quem avalia: `pnpm test` roda 380 testes em desktop 1440 e mobile 390, e
+passa em cerca de 3 de cada 4 rodadas completas sob paralelismo padrão. Antes das
+correções da fase 4 falhava em torno de metade das rodadas.
+
+O que resta é **infraestrutura de teste**, não código de aplicação. Três famílias
+foram diagnosticadas e corrigidas na causa (itens 20 a 22); a fonte residual é uma
+tolerância de tempo de parede em `e2e/runtime-behavior.spec.ts:118`, que assere que
+o cenário `slow` demora ~2500ms com teto de 3500ms — apertado quando a máquina está
+sob carga. Rodar com `--workers=1` passa de forma consistente.
+
+Não foi perseguido até 100% por decisão consciente de prazo. O conserto é
+one-liner: asserir só o piso da latência, que é o que o teste de fato prova.

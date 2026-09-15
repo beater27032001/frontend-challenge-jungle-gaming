@@ -8,7 +8,7 @@ import type { Db } from './db'
  * tables and the loop index so two fresh builds are byte-identical.
  */
 
-export const SEED_VERSION = 3
+export const SEED_VERSION = 5
 
 // --- fixed tables -----------------------------------------------------
 
@@ -33,6 +33,35 @@ const PRICE_TABLE = [
   '3.5',
   '12.5',
 ]
+
+// Fase 4 (specs/04-detalhe-nft.md): tabelas PT duplicadas da fixture, não
+// importadas de `src/features/` (mocks não devem depender de features).
+const CATEGORY_LABELS_PT: Record<NftCategory, string> = {
+  art: 'Arte digital',
+  photography: 'Fotografia',
+  music: 'Música',
+  'art-3d': 'Arte 3D',
+  collectibles: 'Colecionáveis',
+  generative: 'Generativa',
+  gaming: 'Jogos',
+  memberships: 'Assinaturas',
+  utility: 'Utilidade',
+}
+const NETWORK_LABELS_PT: Record<Network, string> = {
+  ethereum: 'Ethereum',
+  polygon: 'Polygon',
+  solana: 'Solana',
+}
+const RARITY_LABELS_PT: Record<NftRarity, string> = {
+  common: 'Comum',
+  rare: 'Raro',
+  epic: 'Épico',
+  legendary: 'Lendário',
+}
+// Atributos de mock (Figma: "Óculos, Esmeralda, Raro"), conteúdo fictício
+// legítimo — o traço/pedra + a raridade da própria fixture.
+const TRAIT_A = ['Óculos', 'Capacete', 'Coroa', 'Máscara']
+const TRAIT_B = ['Esmeralda', 'Rubi', 'Safira', 'Âmbar', 'Ônix']
 
 const ADJECTIVES = [
   'Solar',
@@ -80,6 +109,28 @@ function pad(n: number): string {
   return String(n).padStart(3, '0')
 }
 
+// Fase 4, ciclo de correção (review item 1, opção A): o Figma mostra `1/1`,
+// `1/10`, `1/50`, `ABERTA` nos chips de edição — não os nomes fantasia
+// "Standard"/"Deluxe" que a fase 4 original usou. O label passa a ser
+// GERADO de `totalSupply` (não um valor arbitrário na fixture): `null` é a
+// edição aberta (sem cap fixo) e vira "ABERTA"; qualquer outro número vira
+// `1/{totalSupply}`.
+//
+// `totalSupply` em si (10 para a e1, 3 para a e2) fica como estava: dezenas
+// de asserções em `e2e/api-contracts.spec.ts` (decrementos 10→9→8→7→6,
+// reset para 10, soma 13, etc. — mapeado antes de tocar aqui, mesmo cuidado
+// da fase 2) dependem desses números exatos. Variar `totalSupply` por NFT
+// para produzir literalmente `1/1`/`1/50` quebraria esse contrato numérico
+// sem necessidade: o precedente das fases 2/3 é alinhar o FORMATO do dado
+// ao design (como o preço já é mock, não a cópia exata do Figma), não
+// replicar o valor literal do mock do Figma. `ABERTA` (totalSupply `null`)
+// é suportada pelo tipo e por esta função, mas nenhuma edição da seed atual
+// a usa, pelo mesmo motivo — fica para quando uma fase futura precisar de
+// uma edição sem cap.
+function editionLabel(totalSupply: number | null): string {
+  return totalSupply === null ? 'ABERTA' : `1/${totalSupply}`
+}
+
 function buildNft(i: number): NftDetail {
   const id = `nft-${pad(i + 1)}`
   const category = CATEGORIES[i % 9]
@@ -96,17 +147,17 @@ function buildNft(i: number): NftDetail {
   const editions: NftEdition[] = [
     {
       id: `${id}-e1`,
-      label: 'Standard',
+      label: editionLabel(10),
       priceEth: basePrice,
       totalSupply: 10,
       available: 10,
     },
   ]
-  // Every 4th NFT (nft-004, nft-008, ...) also ships a Deluxe edition.
+  // Every 4th NFT (nft-004, nft-008, ...) also ships a second edition.
   if ((i + 1) % 4 === 0) {
     editions.push({
       id: `${id}-e2`,
-      label: 'Deluxe',
+      label: editionLabel(3),
       priceEth: roundEth(eth(basePrice).times(2)),
       totalSupply: 3,
       available: 3,
@@ -138,9 +189,14 @@ function buildNft(i: number): NftDetail {
     likes: (i * 37) % 500,
     createdAt,
     version: 1,
-    description: `${title} is a GreenMint original from the ${category} collection, ${rarity} rarity.`,
-    images: [0, 1, 2].map((n) => `/nft/ape-0${((i + n) % 4) + 1}.webp`),
+    description: `${title} é um colecionável digital da coleção ${CATEGORY_LABELS_PT[category]}, finalizado à mão, verificado na ${NETWORK_LABELS_PT[network]}, com arte desbloqueável e acesso para colecionadores.`,
+    // Fase 4: 4 imagens por NFT (desktop tem 4 thumbnails, 10:244) — antes 3.
+    // `images[0] === imageUrl` preservado.
+    images: [0, 1, 2, 3].map((n) => `/nft/ape-0${((i + n) % 4) + 1}.webp`),
     editions,
+    ratingAvg: ((35 + (i * 7) % 16) / 10).toFixed(1),
+    ratingCount: 7 + ((i * 13) % 43),
+    attributes: [TRAIT_A[i % 4], TRAIT_B[i % 5], RARITY_LABELS_PT[rarity]],
   }
   refreshNftDerived(nft)
   return nft
@@ -232,7 +288,7 @@ export function buildInitialDb(): Db {
             nftId: 'nft-002',
             editionId: 'nft-002-e1',
             title: nfts[1].title,
-            editionLabel: 'Standard',
+            editionLabel: editionLabel(10), // nft-002-e1
             quantity: 1,
             unitPriceEth: ord1UnitPrice,
             lineTotalEth: ord1UnitPrice,
