@@ -1,6 +1,9 @@
 import { AtSign, Camera, Link2, Play, ThumbsUp } from 'lucide-react'
+import { Link } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { linkFocusRing } from '@/lib/utils'
+import type { NftCategory } from '@/types'
 
 /**
  * Desktop-only footer (spec §9, node `70492:696`). The mobile frame
@@ -46,7 +49,15 @@ const HELP_LINKS = [
   'Política do mercado',
   'Denunciar item',
 ]
-const COLLECTION_LINKS = ['Arte digital', 'Fotografia', 'Música', 'Arte 3D', 'Utilidade']
+// specs/03-catalogo.md "Header (dívida 1) e footer": atalho de entrada —
+// substitui o search inteiro, não preserva filtros anteriores.
+const COLLECTION_LINKS: Array<{ label: string; category: NftCategory }> = [
+  { label: 'Arte digital', category: 'art' },
+  { label: 'Fotografia', category: 'photography' },
+  { label: 'Música', category: 'music' },
+  { label: 'Arte 3D', category: 'art-3d' },
+  { label: 'Utilidade', category: 'utility' },
+]
 
 function LinkColumn({ title, items }: { title: string; items: string[] }) {
   return (
@@ -54,9 +65,26 @@ function LinkColumn({ title, items }: { title: string; items: string[] }) {
       <h3 className="text-body-18 font-bold leading-[16px]">{title}</h3>
       <ul className="mt-2 text-body-14 leading-[30px] text-text-secondary">
         {items.map((item) => (
-          // Texto simples, sem href falso — fases futuras linkam de verdade
-          // (ex.: "Coleções" vira filtro de categoria na fase 3).
+          // Texto simples, sem href falso — colunas "Meu perfil"/"Central de
+          // ajuda" continuam inertes (fora do escopo da fase 3).
           <li key={item}>{item}</li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+function CollectionsLinkColumn() {
+  return (
+    <div>
+      <h3 className="text-body-18 font-bold leading-[16px]">Coleções</h3>
+      <ul className="mt-2 text-body-14 leading-[30px] text-text-secondary">
+        {COLLECTION_LINKS.map(({ label, category }) => (
+          <li key={label}>
+            <Link to="/" search={{ category }} className={linkFocusRing}>
+              {label}
+            </Link>
+          </li>
         ))}
       </ul>
     </div>
@@ -130,7 +158,7 @@ export function Footer() {
           <div className="flex flex-wrap gap-[124px]">
             <LinkColumn title="Meu perfil" items={PROFILE_LINKS} />
             <LinkColumn title="Central de ajuda" items={HELP_LINKS} />
-            <LinkColumn title="Coleções" items={COLLECTION_LINKS} />
+            <CollectionsLinkColumn />
 
             <div className="w-[228px]">
               <h3 className="text-body-18 font-bold leading-[16px]">Redes sociais</h3>

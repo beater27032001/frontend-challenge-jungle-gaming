@@ -48,7 +48,9 @@ Largura 1200, altura 45. Estrutura: linha do header + régua de 1px embaixo.
 - **Botão Entrar**: 100x35, `bg-primary`, `rounded-[6px]`, texto 16px medium em
   `ink`, com ícone de logout 20x20 à esquerda, gap 4px.
 - **Badge do carrinho**: 16x16, número 10px medium em `ink`.
-- **Divisor**: a régua pertence ao frame hospedeiro. A documentação do componente
+- **Divisor**: a régua acompanha a **coluna de 1200**, não sangra a viewport. Com
+  `box-sizing: border-box`, a linha precisa de `h-[45px]` (44 de conteúdo + 1 de
+  régua) — `h-11` com `border-b` dá 43 de conteúdo. A régua pertence ao frame hospedeiro. A documentação do componente
   no Figma avisa: as telas de mercado usam Header Row **sem** divisor.
 
 Ícones (busca, carrinho, logout) são glifos genéricos — usar **lucide-react**, que
@@ -86,7 +88,7 @@ Container 258 de largura, `flex-col`, gap **12px**.
 | Parte | Especificação |
 | --- | --- |
 | Placa | 258x300, `bg-surface-card`, **sem raio** |
-| Artwork | 250x250, `rounded-[15px]`, `object-cover`, offset 4px da esquerda |
+| Artwork | 250x250, `rounded-[15px]`, `object-cover`, **`left: 4` e `top: 31`** — posicionada, não esticada: `inset` come a margem superior da placa |
 | Título | 16px regular, `leading-[16px]`, cor `foreground` |
 | Preço | 18px bold, `leading-[16px]`, cor `text-accent` |
 
