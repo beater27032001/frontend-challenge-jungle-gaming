@@ -140,4 +140,40 @@ As fases 0 e 1 foram mergeadas localmente, antes desta decisão.
 Commit feito é commit publicado — não há janela para `git reset` sem force-push.
 
 **Ao fim de cada ponto, pare e peça validação do usuário antes de commitar.**
-Não commite por conta própria.
+Commits pequenos e temáticos conforme cada bloco fecha, nunca um commit gigante
+no fim.
+
+## Verificação — o instrumento erra mais que o código
+
+Regra nascida de quatro erros reais nesta base, todos do mesmo tipo: **medir o
+próprio harness e reportar como comportamento do sistema.** Nos quatro casos,
+uma checagem de 10 segundos teria evitado.
+
+**Antes de afirmar que um controle se comporta mal, confirme que ele estava
+visível e clicável no estado que você diz estar testando.** O Playwright rola o
+elemento para a vista antes de clicar — então clicar em algo fora da viewport
+produz uma rolagem que parece do app e não é. Meça o `getBoundingClientRect().top`
+relativo antes de agir.
+
+Os outros três, para reconhecer o padrão:
+
+- **Locator que casa mais de um nó** dispara strict mode; um `.catch(() => false)`
+  em volta transforma o erro em "não encontrado" e você reporta defeito onde não há.
+  Prefira `getByRole` específico a `getByText` amplo.
+- **`reuseExistingServer` do Playwright reaproveita um `vite preview` já rodando
+  e não rebuilda.** Um preview deixado de pé por verificação manual faz a suíte
+  inteira rodar contra código velho. Mate a porta antes de rodar.
+- **Ler `scrollY` com um dialog Radix aberto** dá 0 por construção: a trava de
+  scroll zera a janela. Meça depois de fechar.
+
+E o corolário, que vale para código e para relato: **verificação que não
+verifica é pior que nenhuma.** Esta base já teve um gate de console que engolia
+qualquer falha, um teste de contraste que assertava `> 1`, asserções de
+`aria-current` que só olhavam o caso positivo, e um script meu com `print` de
+sucesso incondicional que reportou uma substituição que falhou em silêncio. Ao
+criar um gate, force-o a falhar uma vez para provar que ele acusa.
+
+## Dívidas
+
+`ARCHITECTURE.md`, seção "Dívidas para a fase N" — 11 itens abertos para a fase 4.
+Registro em `.pipeline/` não serve: a fase seguinte sobrescreve.
