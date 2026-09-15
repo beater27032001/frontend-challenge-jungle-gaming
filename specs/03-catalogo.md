@@ -124,3 +124,104 @@ implementados como blocos estáticos da home, não podem aparentar navegação
 funcional para páginas que não existem.
 
 Detalhe do NFT é a fase 4 — aqui só a navegação até ele.
+
+---
+
+# Resolução das Open Questions do Planner
+
+Extraí o que faltava e verifiquei o que o Figma realmente contém. **Três das seis
+não eram lacunas de transcrição — são coisas que o design não especifica.**
+
+## OQ1 — Busca no desktop: não existe estado expandido
+
+O header tem só o ícone de 20×20. Varri o arquivo: não há campo de busca desktop
+expandido, nem overlay, nem modal. O único campo de busca desenhado é o mobile
+("Explorar coleções", `70395:239`).
+
+**Decisão:** o ícone abre um campo inline no header, reaproveitando o `Input` já
+adaptado e o mesmo tratamento visual do campo mobile (h40, `bg-surface-dark`,
+`rounded-[6px]`). Registrar em `ARCHITECTURE.md` como desvio consciente: o design
+não cobre o estado, e busca é requisito de §3.
+
+## OQ2 — Ordenação: o Figma mostra um rótulo, a API define quatro valores
+
+Transcrito no Figma: apenas "Listados recentemente". Não há dropdown aberto.
+`NftSort` em `src/types/nft.ts:21` já define os quatro valores suportados pelo
+handler (`nfts.ts:23`).
+
+**Decisão** — rótulos em português para os valores que já existem, sem inventar
+ordenação nova:
+
+| Valor | Rótulo |
+| --- | --- |
+| `newest` | Listados recentemente *(transcrito do Figma)* |
+| `price-asc` | Menor preço |
+| `price-desc` | Maior preço |
+| `popular` | Em alta |
+
+## OQ3 — Painel de filtros: seções confirmadas, e um descompasso real
+
+As três seções **estão** transcritas em `specs/02-design-system.md` §3, com títulos:
+**"Coleções"** (as 9 categorias), **"Faixa de preço"** (slider + Aplicar) e
+**"Rede"** (Ethereum, Polygon, Solana). Não há seção de raridade no painel — o
+design não tem.
+
+**O descompasso:** `network` não existe no modelo de NFT. Não está em `NftSummary`,
+não está em `NftDetail`, não está em `NftEdition`. O tipo `Network` só é usado em
+carteiras e na taxa de rede da cotação. Ou seja, a seção "Rede" do design não tem
+dado para filtrar.
+
+**Decisão: adicionar `network` ao NFT.** Renderizar a seção sem filtrar violaria
+"ações fora do escopo não devem aparentar sucesso funcional" (§3), e omiti-la
+custaria fidelidade. É uma mudança pequena — campo na fixture distribuído
+deterministicamente, mais `network` no schema de query de `nfts.ts` — e alinha dado
+e design, igual ao que a fase 2 fez com as 9 categorias.
+
+Sobre a **raridade**: existe no dado (`NftRarity`) e a API já filtra por ela, mas o
+design não tem seção de filtro para isso. Não inventar seção; a raridade aparece
+como badge no card mobile.
+
+**Ordem da sidebar** (frame `2:2`, por coordenada y): painel de filtros em y=0, e o
+banner "NFT EM DESTAQUE" abaixo, em y=809.
+
+Sobre o **thumb do slider** (dívida 4 da fase 2): o Figma desenha os dois thumbs
+como círculos de 15px, e o trilho preenchido em 161px — mas **não transcreve cor de
+preenchimento**. Usar `primary` no thumb e no trecho ativo do trilho, e
+`border-soft` no inativo; registrar como calibração.
+
+## OQ4 — Badge de raridade: o Figma tem um só
+
+Varri o arquivo inteiro: existe apenas **`RARO`**. Não há `COMUM`, `ÉPICO` nem
+`LENDÁRIO` desenhados, e nem todo card mobile leva badge — no frame, só um leva.
+
+**Decisão:** badge aparece apenas para raridades acima de comum, com os rótulos
+`RARO`, `ÉPICO` e `LENDÁRIO` seguindo o estilo transcrito de `RARO` (68×32,
+`bg-primary`, 13px medium em `ink`). Largura passa a ser por conteúdo, já que
+"LENDÁRIO" não cabe em 68px. Registrar em `ARCHITECTURE.md`.
+
+## OQ5 — Hero mobile — node `70395:240`, extraído agora
+
+366×190, `rounded-[12px]`, `p-[16px]`. **Não é o hero desktop reescalado.**
+
+| Parte | Especificação |
+| --- | --- |
+| Fundo | SVG de máscara com gradiente e dois círculos decorativos, cobrindo 366×190 |
+| Sobretítulo | "Bem-vindo à Kurio" — 12px medium, `leading-[16px]`, `foreground` |
+| Título | "SEJA DONO DA" / "CULTURA DIGITAL" — 18px bold, `leading-[29px]`, largura 190 |
+| Texto | "Descubra NFTs selecionados de criadores do mundo todo." — 12px regular, `leading-[18px]`, `text-secondary` |
+| CTA | "EXPLORAR" + seta 16px — **link, não botão preenchido** — 12px bold, `leading-[14px]`, `text-accent`, gap 8 |
+| Artes | Duas sobrepostas: 138×138 e 58×58, ambas `rounded-[16px]`; a menor deslocada `ml-[14px] mt-[88px]` |
+| Pontos | 33×7, abaixo do bloco (gap 16) |
+
+O gradiente do fundo é um SVG exportado. Reproduzir com CSS a partir dos tokens
+(`primary` a baixa opacidade sobre `surface-card`) e registrar como aproximação —
+ou pedir extração do SVG se a fidelidade não bastar.
+
+## OQ6 — Pontos do hero: não há segundo slide
+
+Desktop tem 3 pontos (40×8), mobile tem 33×7. Mas **existe um único conteúdo de
+hero em cada frame** — não há slides 2 e 3 desenhados em lugar nenhum.
+
+**Decisão: decoração estática, `aria-hidden`.** Construir carrossel exigiria
+inventar dois slides que o design não tem, e um carrossel com um slide só é pior
+que nenhum. Registrar em `ARCHITECTURE.md`.
