@@ -58,6 +58,14 @@ precisa entrar.
 | Ana Volt | `ana@greenmint.dev` | `GreenMint#1` | 3 favoritos, 2 itens no carrinho, 1 pedido confirmado, 2 carteiras (Ethereum principal + Polygon) |
 | Bruno Chain | `bruno@greenmint.dev` | `GreenMint#2` | 1 favorito, carrinho vazio, 1 carteira |
 
+
+> **Sobre o domínio `@greenmint.dev`**: a marca do produto é **KURIO**, como o
+> wordmark do Figma mostra. "GreenMint" foi o nome usado internamente na fase 0,
+> antes de a identidade real ser extraída do arquivo de design, e sobreviveu nos
+> e-mails das fixtures e nas chaves de `localStorage` (`greenmint:db:v1`,
+> `greenmint:scenario`). São identificadores internos: renomeá-los exigiria subir
+> o `SEED_VERSION` e ajustar dezenas de asserções de teste, sem ganho visível.
+> Tudo que o usuário vê diz KURIO.
 Cupons da fixture: `GREEN10` (10% válido) e `EXPIRED20` (20%, expirado — serve para o fluxo
 de cupom inválido).
 
