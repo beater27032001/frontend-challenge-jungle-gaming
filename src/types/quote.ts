@@ -1,12 +1,13 @@
 import { z } from 'zod'
 import type { EthAmount } from './common'
+import { NETWORKS } from './wallet'
 import type { Network } from './wallet'
 
 /** Quote contracts: a priced snapshot of a cart, valid for a short window. */
 
 export const quoteRequestSchema = z.object({
   couponCode: z.string().optional(),
-  network: z.enum(['ethereum', 'polygon']).default('ethereum'),
+  network: z.enum(NETWORKS).default('ethereum'),
 })
 export type QuoteRequest = z.infer<typeof quoteRequestSchema>
 

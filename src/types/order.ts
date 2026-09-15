@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import type { EthAmount } from './common'
 import type { QuoteItem } from './quote'
+import { NETWORKS } from './wallet'
 import type { Network } from './wallet'
 
 /** Order contracts: an immutable receipt snapshot resolved after creation. */
@@ -10,7 +11,7 @@ export type OrderStatus = 'pending' | 'confirmed' | 'declined'
 export const createOrderSchema = z.object({
   quoteId: z.string(),
   walletId: z.string(),
-  network: z.enum(['ethereum', 'polygon']),
+  network: z.enum(NETWORKS),
   payer: z.object({ name: z.string().min(2), email: z.string().email() }),
 })
 export type CreateOrderRequest = z.infer<typeof createOrderSchema>

@@ -2,7 +2,21 @@ import type { EthAmount } from './common'
 
 /** NFT catalogue contracts: list/detail shapes and list query params. */
 
-export type NftCategory = 'art' | 'gaming' | 'music' | 'photography'
+// Ordem = ordem do design (spec §3); os 4 slugs da fase 1 preservados dentro
+// da lista de 9. Slugs são contrato interno, não medida visual — labels PT
+// para a UI nascem na fase 3, junto do filtro que os consome.
+export const NFT_CATEGORIES = [
+  'art', // Arte digital
+  'photography', // Fotografia
+  'music', // Música
+  'art-3d', // Arte 3D
+  'collectibles', // Colecionáveis
+  'generative', // Generativa
+  'gaming', // Jogos
+  'memberships', // Assinaturas
+  'utility', // Utilidade
+] as const
+export type NftCategory = (typeof NFT_CATEGORIES)[number]
 export type NftRarity = 'common' | 'rare' | 'epic' | 'legendary'
 export type NftSort = 'newest' | 'price-asc' | 'price-desc' | 'popular'
 

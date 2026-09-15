@@ -17,7 +17,7 @@ function Home() {
   return (
     <div className="mx-auto flex min-h-dvh max-w-content flex-col justify-center gap-6 px-6">
       <p className="text-caption-12 font-bold tracking-widest text-text-secondary uppercase">
-        GreenMint
+        KURIO
       </p>
       <h1 className="text-display-43 font-bold text-text-primary">
         Seja dono do futuro da arte digital
