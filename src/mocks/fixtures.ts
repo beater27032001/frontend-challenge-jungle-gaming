@@ -1,5 +1,5 @@
 import { eth, roundEth } from '@/lib/money'
-import { NFT_CATEGORIES } from '@/types'
+import { NETWORKS, NFT_CATEGORIES } from '@/types'
 import type { NftCategory, NftDetail, NftEdition, NftRarity, Network } from '@/types'
 import type { Db } from './db'
 
@@ -8,7 +8,7 @@ import type { Db } from './db'
  * tables and the loop index so two fresh builds are byte-identical.
  */
 
-export const SEED_VERSION = 2
+export const SEED_VERSION = 3
 
 // --- fixed tables -----------------------------------------------------
 
@@ -84,6 +84,10 @@ function buildNft(i: number): NftDetail {
   const id = `nft-${pad(i + 1)}`
   const category = CATEGORIES[i % 9]
   const rarity = RARITIES[(i + RARITY_OFFSET) % 4]
+  // Decorrelacionado da categoria (i % 9): dentro de cada bloco de 9 o ciclo
+  // de rede desloca 1, então todo par categoria×rede existe (mesmo racional
+  // do RARITY_OFFSET). 48 itens → exatamente 16 por rede.
+  const network: Network = NETWORKS[(i + Math.floor(i / 9)) % 3]
   const basePrice = PRICE_TABLE[i % PRICE_TABLE.length]
   const creator = CREATORS[i % CREATORS.length]
   const title = `${ADJECTIVES[i % ADJECTIVES.length]} ${NOUNS[Math.floor(i / ADJECTIVES.length) % NOUNS.length]}`
@@ -123,6 +127,7 @@ function buildNft(i: number): NftDetail {
     creator: { id: creator.id, name: creator.name, avatarUrl: creator.avatarUrl },
     category,
     rarity,
+    network,
     // External placeholder-image debt paid off (spec §5): 4 local webp
     // assets, cycled deterministically by index. `images[0] === imageUrl`
     // always holds.
