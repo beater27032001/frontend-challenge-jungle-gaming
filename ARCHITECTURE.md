@@ -50,11 +50,12 @@ Decisões e desvios da spec/design system que não são óbvios lendo o código.
    só no item ativo. Cor (`text-text-accent`) continua presente, mas nunca é
    o único sinal de estado.
 
-## Dívidas para a fase 3
+## Dívidas herdadas da fase 2 — situação após a fase 3
 
-Os 6 achados `[minor]` da revisão da fase 2 (ciclo 2), registrados aqui para
-ganharem casa persistente em vez de viverem só em artefatos de pipeline que a
-fase 3 sobrescreve:
+O item 6 (cenários `empty`/`out-of-order`) foi **quitado** na fase 3, com prova
+real: o teste assere que o título do filtro descartado some do grid depois que a
+resposta lenta aterrissa. Os outros 5 seguem abertos e estão repetidos na lista
+da fase 4 abaixo, com a numeração de lá.
 
 1. `src/components/layout/header.tsx:14-18` — `pathname.startsWith('/')`
    marca "Início" ativo em qualquer rota (inclusive 404); trocar por
@@ -70,3 +71,140 @@ fase 3 sobrescreve:
    não usadas; podar ou justificar, espelhando o button.
 6. `src/mocks/scenarios.ts:12,14` — cenários `empty`/`out-of-order` sem
    teste E2E (dívida desde a fase 1); cobrir junto do `catalog.spec.ts`.
+
+## Fase 3 — Início / catálogo
+
+1. **Zoom 200% resolvido por equivalência funcional.** O gatilho da decisão 2
+   (fase 2) — "revisitar antes de qualquer conteúdo do footer se tornar
+   funcional" — foi acionado pela coluna "Coleções" do footer, que agora
+   navega para `/?category=...`. A resolução não é reexibir o footer no
+   mobile (o frame `14:5226` não tem footer): é garantir que a mesma função
+   (filtrar por categoria) tem equivalente completo na composição mobile — o
+   `Sheet` de filtros aberto pela `MobileSearchBar`, que já existia como
+   primitivo desde a fase 2 sem consumidor. A decisão 2 continua válida com o
+   gatilho quitado, coberta em `e2e/runtime-behavior.spec.ts` (620px) e em
+   `e2e/catalog.spec.ts` (equivalência funcional do filtro).
+2. **`network` entra no modelo de NFT** (`NftSummary`/`NftDetail`/
+   `NftListParams`, `src/types/nft.ts`). A seção "Rede" do painel de filtros
+   (specs/02-design-system.md §3) não tinha dado para filtrar — renderizá-la
+   sem filtro violaria "ações fora do escopo não devem aparentar sucesso
+   funcional" (CHALLENGE §3). Fixture determinística em
+   `src/mocks/fixtures.ts` (`NETWORKS[(i + Math.floor(i / 9)) % 3]`,
+   deliberadamente não `i % 3`: com 9 categorias o gcd seria 3 e cada
+   categoria mapearia para uma única rede, matando a combinabilidade
+   categoria×rede) e filtro em `src/mocks/handlers/nfts.ts`. `SEED_VERSION`
+   sobe de 2 para 3.
+3. **Busca desktop: estado expandido não existe no Figma.** O ícone de
+   busca do header (20×20, antes `disabled`) passa a alternar um campo
+   inline reaproveitando o tratamento visual do campo mobile — desvio
+   consciente, já que busca é requisito do desafio (§3) e o arquivo não
+   desenha esse estado. `aria-expanded` no botão; Enter grava `q`, Escape
+   fecha sem gravar e devolve o foco ao botão.
+4. **Rótulos de ordenação** (`src/features/nft/labels.ts`): só "Listados
+   recentemente" está transcrito no Figma. Os outros 3 valores de `NftSort`
+   (`price-asc`/`price-desc`/`popular`) recebem rótulo em português sem
+   introduzir nenhuma ordenação nova — a API já suportava os 4 desde a fase 1.
+5. **Badge de raridade restrito a acima de comum.** O Figma só desenha
+   `RARO`; `ÉPICO`/`LENDÁRIO` seguem o mesmo estilo (68×32 de referência,
+   `bg-primary`, 13px medium ink), mas a largura passa a ser por conteúdo
+   (`LENDÁRIO` não cabe em 68px fixos). `common` nunca renderiza badge.
+6. **Hero mobile: fundo aproximado em CSS.** O Figma exporta um SVG de
+   máscara com gradiente + 2 círculos para o hero mobile (366×190); sem
+   acesso ao MCP do Figma para extrair o SVG, o fundo foi aproximado com um
+   gradiente radial em `primary` sobre `bg-card` (`hero.tsx`). Revisitar se a
+   baseline visual da fase 10 acusar divergência.
+7. **Pontos decorativos dos heroes (`aria-hidden`).** Nem o frame desktop
+   nem o mobile têm um segundo/terceiro slide desenhado — um carrossel de um
+   slide só seria pior que nenhum. Os pontos (3× 40×8 no desktop, 3× 33×7 no
+   mobile) são puramente decorativos.
+8. **Mapeamento aba↔sort do toolbar** (`catalog-toolbar.tsx`): "Todos os
+   NFTs" grava `sort: undefined` (default `newest`); "Novos lançamentos"
+   grava `sort: 'newest'` explícito; "Em alta" grava `sort: 'popular'`. A aba
+   ativa é derivada da URL (`popular`→Em alta, `newest` explícito→Novos
+   lançamentos, ausente ou `price-*`→Todos os NFTs). A API não tem uma
+   "janela de lançamento" própria — specs/03-catalogo.md §2 já descreve as
+   abas como atalhos de ordenação, não filtros novos.
+9. **Adaptações mobile sem frame correspondente:** o seletor de ordenação
+   mora dentro do `Sheet` de filtros (não existe toolbar no frame mobile); a
+   paginação renderiza abaixo do masonry; o banner "NFT EM DESTAQUE" é
+   desktop-only (a sidebar inteira é `hidden lg:flex`, o frame mobile não o
+   mostra).
+10. **Placeholders provisórios pendentes de extração fina** (todos com
+    comentário `ponytail:` no código, sem consumidor de medida exata no
+    Figma disponível a este pipeline):
+    - offset do coração de favorito e do badge de raridade no card mobile
+      (`nft-card-mobile.tsx`);
+    - offset da coluna direita do masonry (`mt-8` provisório em
+      `catalog-grid.tsx`; o frame mostra L 513 / R 544 sem o delta exato);
+    - posições e gradiente exato das 3 decorações do banner de destaque
+      (`featured-banner.tsx`);
+    - posição do grupo de artes sobrepostas do hero mobile dentro do card
+      (`hero.tsx`) — só o offset relativo entre as duas imagens foi
+      transcrito (`ml-[14px] mt-[88px]`), não a posição do grupo no card.
+11. **Dívida 1 da fase 2 fechada:** `header.tsx` trocou
+    `pathname.startsWith('/')` por igualdade exata para "Início" e adicionou
+    "Mercado" (ativo em `pathname.startsWith('/nft')`, spec 02 §2); numa 404
+    nenhum item fica ativo. **Dívida 4 fechada:** `slider.tsx` calibrado —
+    thumb e trecho ativo do trilho em `primary`, trilho inativo em
+    `border-soft` (specs/03-catalogo.md resolução OQ3; cor não transcrita,
+    registrada como calibração). Dívidas 3 (`card.tsx` `rounded-xl`) e 5
+    (variantes do badge) permanecem: nenhum consumidor desta fase as aciona.
+12. **Migração da prontidão E2E:** `boot()` (`e2e/helpers.ts`) não depende
+    mais do texto da tela de smoke — espera `window.__mocks` (instalado por
+    `startWorker()` antes do React montar) e confirma `GET /api/health` com
+    200. `awaitMswReady(page)` é exportado para reuso; as 15 asserções
+    inline que liam `getByRole('status')` com "MSW respondeu" foram trocadas
+    mecanicamente pela mesma chamada.
+13. **Seção editorial "Diário da Cunhagem" e cards promocionais omitidos por
+    completo** — o desafio exclui conteúdo editorial da entrega; blocos
+    estáticos sem destino real aparentariam navegação funcional.
+14. **Testes de fase 2 com asserções sobre estado `disabled`/ordem de
+    tabulação do header e da `MobileSearchBar` atualizados** (não deletados)
+    em `e2e/runtime-behavior.spec.ts`: a busca (desktop e mobile) e o filtro
+    mobile deixaram de ser placeholders `disabled` nesta fase, então
+    "próximo controle focável após X" mudou de destino em várias asserções
+    herdadas da fase 2 — mesmo precedente da fase 2 quando as 9
+    categorias/3 redes obrigaram a atualizar testes de fixture já existentes
+    (specs/02-design-system.md §3).
+
+
+## Dívidas para a fase 4
+
+Achados `[minor]` da revisão da fase 3 mais o que sobrou da fase 2, num só lugar
+— artefato de `.pipeline/` é sobrescrito pela fase seguinte, este arquivo não.
+
+**Da revisão da fase 3:**
+
+1. `e2e/catalog.spec.ts:387-391` — flake de ~1 em 20 (mobile, "Buscar" não
+   focado após 4 Tabs). Preâmbulo com contagem fixa de Tabs sem asserção
+   intermediária, mesma classe do flake de slider. Asserir foco a cada Tab.
+2. `src/features/nft/components/catalog-toolbar.tsx:78` — prop `total`
+   recebida e nunca usada. API morta: remover ou consumir.
+3. `src/components/layout/footer.tsx:84` — o `<Link search={{ category }}>`
+   literal ganha `aria-current` injetado pelo router por match parcial. O
+   Reviewer julgou aceitável (nunca há dois, e "coleção corrente" é semântica
+   defensável), mas é decisão implícita: ou alinhar com
+   `activeOptions={{ exact: true }}`, ou registrar a aceitação aqui.
+4. `e2e/catalog.spec.ts` + `catalog-tester.spec.ts` + `catalog-e2e-tester.spec.ts`
+   — 3 arquivos, 1.346 linhas, um domínio. O padrão "um spec por agente"
+   voltou; consolidar por domínio, como a fase 2 fez.
+5. `ARCHITECTURE.md` decisão 2 (fase 2) — falta uma linha de cross-ref
+   apontando que a fase 3 resolveu o mérito do zoom.
+
+**Herdadas da fase 2, ainda abertas:**
+
+6. `src/components/layout/header.tsx` — `pathname.startsWith('/')` marca
+   "Início" ativo em qualquer rota, inclusive 404. A tabela de prefixos cresce
+   na fase 4 (detalhe do NFT), então o conserto vence aqui.
+7. `src/index.css` — sombreamento de `--color-foreground` sobre o alias
+   `--foreground`, mesma armadilha da colisão `--secondary` já corrigida.
+8. `src/components/ui/card.tsx` — `rounded-xl` (10px) fora do raio de sistema.
+9. `src/components/ui/slider.tsx` — thumb `bg-white`, fora da paleta.
+10. `src/components/ui/badge.tsx` — variantes não usadas; podar ou justificar.
+
+**Observação de design, não dívida técnica:**
+
+11. No mobile o botão de filtro não é fixo (doc-y 16, sem ancestral `sticky`).
+    Para filtrar no meio da lista o usuário precisa rolar até o topo. Está
+    **fiel ao Figma**, que não mostra barra fixa — mas é fricção real, e vale
+    reconsiderar se a fidelidade permitir.

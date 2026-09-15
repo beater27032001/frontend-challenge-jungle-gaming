@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { boot } from './helpers'
+import { awaitMswReady, boot, isExpectedBootNoise } from './helpers'
 
 /**
  * Phase 1 runtime checks: things only observable against the real running
@@ -29,7 +29,9 @@ test.describe('Clean boot of the production build', () => {
     const consoleErrors: string[] = []
     const failedRequests: string[] = []
     page.on('console', (msg) => {
-      if (msg.type() === 'error') consoleErrors.push(msg.text())
+      // a URL vem em location(), não em text() — guardamos as duas para que os
+      // filtros abaixo possam dizer QUAL falha eles permitem
+      if (msg.type() === 'error') consoleErrors.push(`${msg.text()} ${msg.location().url}`)
     })
     page.on('pageerror', (err) => consoleErrors.push(String(err)))
     page.on('requestfailed', (req) => failedRequests.push(`${req.method()} ${req.url()}`))
@@ -37,7 +39,7 @@ test.describe('Clean boot of the production build', () => {
     await boot(page)
     await page.waitForLoadState('networkidle')
 
-    expect(consoleErrors).toEqual([])
+    expect(consoleErrors.filter((msg) => !isExpectedBootNoise(msg))).toEqual([])
     expect(failedRequests).toEqual([])
   })
 })
@@ -78,17 +80,27 @@ test.describe('offline scenario', () => {
   }) => {
     const consoleErrors: string[] = []
     page.on('console', (msg) => {
-      if (msg.type() === 'error') consoleErrors.push(msg.text())
+      // a URL vem em location(), não em text() — guardamos as duas para que os
+      // filtros abaixo possam dizer QUAL falha eles permitem
+      if (msg.type() === 'error') consoleErrors.push(`${msg.text()} ${msg.location().url}`)
     })
     page.on('pageerror', (err) => consoleErrors.push(String(err)))
 
-    // GET /api/health is deliberately outside withScenario, so the smoke
-    // screen must still resolve even though every other route is offline.
+    // GET /api/health is deliberately outside withScenario, so the boot
+    // check must still resolve even though every other route is offline.
     await boot(page, '?mock-scenario=offline')
-    // Boot itself (the health check) must be clean; the browser's own
-    // "net::ERR_FAILED" log for the *intentionally* rejected fetch below is
-    // expected noise from the offline scenario, not an app error.
-    expect(consoleErrors).toEqual([])
+    // Boot itself (the health check) must be clean; the home screen now
+    // fires real catalogue/session queries (fase 3) that fail as
+    // net::ERR_FAILED under this scenario — expected noise from the offline
+    // scenario itself, not an app error, so it's filtered before the
+    // assertion (same intent as the pre-fase-3 comment this replaces).
+    // Neste cenário TODA rota /api falha por design, então aqui o filtro é
+    // deliberadamente largo — mas continua escopado a /api: um erro vindo de
+    // qualquer outra origem ainda reprova.
+    const appErrors = consoleErrors.filter(
+      (msg) => !(/ERR_FAILED|Failed to load resource/.test(msg) && msg.includes('/api/')),
+    )
+    expect(appErrors).toEqual([])
 
     const failed = await page.evaluate(async () => {
       try {
@@ -148,7 +160,7 @@ test.describe('?mock-reset=1 boot flag', () => {
     // same URL, `?mock-reset=1` included — installMockControls() re-reads
     // location.search on every boot and calls resetDb() again.
     await page.reload()
-    await expect(page.getByRole('status')).toHaveText(/MSW respondeu: ok/i)
+    await awaitMswReady(page)
 
     const sessionAfter = await page.evaluate(async () => (await fetch('/api/auth/session')).status)
     // Expected per the spec's intent (a boot flag should apply once, not on
@@ -215,7 +227,7 @@ test.describe('Boot param cleanup (fix iteration 1)', () => {
     // Runtime switch, the way `window.__mocks` is meant to be used.
     await page.evaluate(() => window.__mocks?.setScenario('default'))
     await page.reload()
-    await expect(page.getByRole('status')).toHaveText(/MSW respondeu: ok/i)
+    await awaitMswReady(page)
 
     health = await page.evaluate(async () => (await (await fetch('/api/health')).json()))
     // No stale query param survives to re-impose 'slow' over the runtime
@@ -244,7 +256,9 @@ test.describe('Boot param cleanup — no regressions introduced by the fix', () 
   }) => {
     const consoleErrors: string[] = []
     page.on('console', (msg) => {
-      if (msg.type() === 'error') consoleErrors.push(msg.text())
+      // a URL vem em location(), não em text() — guardamos as duas para que os
+      // filtros abaixo possam dizer QUAL falha eles permitem
+      if (msg.type() === 'error') consoleErrors.push(`${msg.text()} ${msg.location().url}`)
     })
     page.on('pageerror', (err) => consoleErrors.push(String(err)))
 
@@ -255,7 +269,7 @@ test.describe('Boot param cleanup — no regressions introduced by the fix', () 
     // params are gone, to prove the SW isn't a one-shot artifact of the
     // param-carrying boot — it keeps answering on the plain reload too.
     await page.reload()
-    await expect(page.getByRole('status')).toHaveText(/MSW respondeu: ok/i)
+    await awaitMswReady(page)
     expect(consoleErrors).toEqual([])
 
     const nft = await page.evaluate(async () => (await (await fetch('/api/nfts/nft-001')).json()))
@@ -298,7 +312,7 @@ test.describe('Shareable scenario link', () => {
     // URL) with no `window.__mocks.setScenario()` call in between — the
     // scenario must come from localStorage, not from a param that's gone.
     await page.reload()
-    await expect(page.getByRole('status')).toHaveText(/MSW respondeu: ok/i)
+    await awaitMswReady(page)
 
     const health = await page.evaluate(async () => (await (await fetch('/api/health')).json()))
     expect(health.scenario).toBe('offline')
@@ -314,10 +328,13 @@ test.describe('Shareable scenario link', () => {
 test.describe('Smoke', () => {
   test('foundation boots with the mock layer answering', async ({ page }) => {
     await page.goto('/')
+    // The h1 differs by viewport (HeroDesktop vs HeroMobile, fase 3 — spec
+    // §"Hero mobile"): this project-agnostic regex accepts both transcribed
+    // titles instead of picking one project's copy.
     await expect(
-      page.getByRole('heading', { name: /seja dono do futuro/i }),
+      page.getByRole('heading', { name: /seja dono d[oa] (futuro|cultura digital)/i, level: 1 }),
     ).toBeVisible()
-    await expect(page.getByRole('status')).toHaveText(/MSW respondeu: ok/i)
+    await awaitMswReady(page)
   })
 
   test('unknown route renders the 404 boundary', async ({ page }) => {
@@ -330,9 +347,17 @@ test.describe('Smoke', () => {
   }) => {
     await boot(page)
     await expect(page).toHaveTitle(/KURIO/)
-    // The eyebrow above the heading, specifically (KURIO also legitimately
-    // appears in the header wordmark and footer brand band).
-    await expect(page.locator('#main').getByText('KURIO', { exact: true })).toBeVisible()
+    // Fase 3: a home real usa a copy transcrita do hero ("Bem-vindo à
+    // Kurio", specs/03-catalogo.md §1) em vez do eyebrow placeholder da
+    // tela de smoke — checa "Kurio" (case-insensitive) dentro de #main em
+    // vez do texto exato "KURIO" que só existia no placeholder.
+    // Both hero variants (desktop/mobile) share the same eyebrow copy and
+    // are always both in the DOM (one `hidden` per viewport, spec pattern) —
+    // `.and(':visible')` picks whichever one the current project's viewport
+    // actually shows, instead of assuming DOM order.
+    await expect(
+      page.locator('#main').getByText(/kurio/i).and(page.locator(':visible')),
+    ).toBeVisible()
     await expect(page.getByText('GreenMint')).toHaveCount(0)
   })
 })
@@ -364,7 +389,10 @@ test.describe('Shell — desktop composition (>=1024, spec §2/§9)', () => {
     const search = header.getByRole('button', { name: 'Buscar' })
     const cart = header.getByRole('button', { name: 'Carrinho' })
     const entrar = header.getByRole('button', { name: /Entrar/ })
-    await expect(search).toBeDisabled()
+    // Busca inline (fase 3, resolução OQ1): o botão passa a ser funcional —
+    // só cart/Entrar seguem desabilitados (fases 5/6, sem consumidor ainda).
+    await expect(search).toBeEnabled()
+    await expect(search).toHaveAttribute('aria-expanded', 'false')
     await expect(cart).toBeDisabled()
     await expect(entrar).toBeDisabled()
 
@@ -374,11 +402,17 @@ test.describe('Shell — desktop composition (>=1024, spec §2/§9)', () => {
     const entrarBg = await entrar.evaluate((el) => getComputedStyle(el).backgroundColor)
     expect(entrarBg).toBe('rgb(210, 138, 76)') // --color-primary #d28a4c
 
-    // 44px header row + 1px divider = 45px total (spec §2).
-    const rowBox = await header.locator(':scope > div').first().boundingBox()
-    expect(rowBox?.height).toBe(44)
-    const borderBottom = await header.evaluate((el) => getComputedStyle(el).borderBottomWidth)
-    expect(borderBottom).toBe('1px')
+    // 44px header row + 1px divider = 45px total (spec §2). A régua vive na
+    // coluna de conteúdo, não no <header>: no Figma ela acompanha os 1200 e
+    // não sangra a viewport inteira. Asserir a largura é o que pega a
+    // regressão — só checar `borderBottomWidth` passaria nas duas versões.
+    const row = header.locator(':scope > div').first()
+    const rowBox = await row.boundingBox()
+    expect(rowBox?.height).toBe(45) // 44 de conteúdo + 1 da régua
+    expect(await row.evaluate((el) => getComputedStyle(el).borderBottomWidth)).toBe('1px')
+    expect(await header.evaluate((el) => getComputedStyle(el).borderBottomWidth)).toBe('0px')
+    const viewportWidth = page.viewportSize()!.width
+    expect(rowBox!.width).toBeLessThan(viewportWidth)
   })
 
   test('cart badge is absent from the DOM while the count is unwired (criterion 15)', async ({ page }) => {
@@ -449,15 +483,18 @@ test.describe('Shell — mobile composition (<1024, spec §10/§11)', () => {
       await expect(page.locator('header')).toBeHidden()
       await expect(page.locator('footer')).toBeHidden()
 
+      // Fase 3: busca e filtro passam a ser funcionais em '/' (catálogo) —
+      // spec "Busca desktop"/"Painel de filtros"; só ficam desabilitados
+      // fora do catálogo (ex.: /nft/$nftId), sem consumidor aqui.
       const search = page.getByPlaceholder('Explorar coleções')
       await expect(search).toBeVisible()
-      await expect(search).toBeDisabled()
+      await expect(search).toBeEnabled()
       const searchBox = await search.boundingBox()
       expect(searchBox?.height).toBe(45)
 
       const filter = page.getByRole('button', { name: 'Filtrar' })
       await expect(filter).toBeVisible()
-      await expect(filter).toBeDisabled()
+      await expect(filter).toBeEnabled()
       const filterBox = await filter.boundingBox()
       expect(filterBox?.width).toBe(45)
       expect(filterBox?.height).toBe(45)
@@ -575,17 +612,15 @@ test.describe('Accessibility — keyboard navigation and focus (criterion 24)', 
     await page.keyboard.press('Tab')
     await expect(page.getByRole('link', { name: 'Início' })).toBeFocused()
 
-    // Next real stop is the footer newsletter input — disabled search/cart/Entrar
-    // buttons never receive focus (out of tab order).
+    // Fase 3: o botão de busca do header deixa de ser disabled (busca
+    // inline, resolução OQ1) — é o próximo stop, não mais a newsletter do
+    // footer (agora precedida por todo o conteúdo real do catálogo). O
+    // passeio completo pelo catálogo fica em e2e/catalog.spec.ts (critério 27).
     await page.keyboard.press('Tab')
-    const active = await page.evaluate(() => ({
-      tag: document.activeElement?.tagName,
-      id: document.activeElement?.id,
-    }))
-    expect(active).toEqual({ tag: 'INPUT', id: 'newsletter-email' })
+    await expect(page.getByRole('button', { name: 'Buscar' })).toBeFocused()
   })
 
-  test('mobile: skip-link then the Home tab is the only other stop; Favoritos/Carrinho/Perfil/FAB never receive focus', async ({
+  test('mobile: skip-link then the search bar controls are the next stops; Favoritos/Carrinho/Perfil/FAB stay disabled and out of tab order', async ({
     page,
   }) => {
     await page.setViewportSize({ width: 390, height: 844 })
@@ -594,23 +629,26 @@ test.describe('Accessibility — keyboard navigation and focus (criterion 24)', 
     await page.keyboard.press('Tab')
     await expect(page.getByRole('link', { name: 'Pular para o conteúdo' })).toBeFocused()
 
+    // Fase 3: busca e filtro da MobileSearchBar deixam de ser disabled — são
+    // os dois próximos stops, antes de qualquer conteúdo do catálogo (o
+    // passeio completo fica em e2e/catalog.spec.ts, critério 27).
     await page.keyboard.press('Tab')
-    const nav = page.getByRole('navigation', { name: 'Navegação principal' })
-    await expect(nav.getByRole('link')).toBeFocused()
-    // fix iteration 1: same visible-indicator check as the desktop test
-    // above — `linkFocusRing` now renders a --ring box-shadow here too.
+    await expect(page.getByPlaceholder('Explorar coleções')).toBeFocused()
     const style = await page.evaluate(() => {
       const cs = getComputedStyle(document.activeElement!)
       return { outline: cs.outlineStyle, boxShadow: cs.boxShadow }
     })
     expect(style.outline !== 'none' || style.boxShadow !== 'none').toBe(true)
 
-    // One more Tab: nothing else is focusable (every other control is
-    // disabled), so focus falls through to <body> — never lands on a
-    // disabled button.
     await page.keyboard.press('Tab')
-    const tag = await page.evaluate(() => document.activeElement?.tagName)
-    expect(tag).not.toBe('BUTTON')
+    await expect(page.getByRole('button', { name: 'Filtrar' })).toBeFocused()
+
+    // Favoritos/Carrinho/Perfil (tab bar) e o FAB seguem sem consumidor
+    // (fases 4/6/8): `disabled` já é suficiente para excluí-los da ordem de
+    // tabulação, sem precisar percorrer todo o catálogo até a tab bar.
+    for (const label of ['Favoritos', 'Carrinho', 'Perfil', 'Criar']) {
+      await expect(page.getByRole('button', { name: label })).toBeDisabled()
+    }
   })
 })
 
@@ -960,26 +998,28 @@ test.describe('plain <Link> elements render the --ring token on focus-visible (f
     expect(inicioStyle.boxShadow).not.toBe('none')
     expect(inicioStyle.ringColor).toContain(RING_HEX)
 
-    // Control, same page: the one enabled input (newsletter) also turns its
-    // border to the --ring token on focus-visible — same token, two
-    // mechanisms (border vs. box-shadow ring), both wired to --ring. The
-    // border-color utility has no alpha modifier, so it resolves straight
-    // to rgb() — unlike the ring above, RING_RGB applies here directly.
-    await page.keyboard.press('Tab') // newsletter email input
-    const active = await page.evaluate(() => ({
-      tag: document.activeElement?.tagName,
-      id: document.activeElement?.id,
-      borderColor: getComputedStyle(document.activeElement!).borderColor,
-    }))
-    expect(active).toEqual({ tag: 'INPUT', id: 'newsletter-email', borderColor: RING_RGB })
+    // Control, same page: the newsletter Input also turns its border to the
+    // --ring token on focus-visible — same token, two mechanisms (border vs.
+    // box-shadow ring), both wired to --ring. Focused directly rather than
+    // reached by further Tab presses: fase 3 puts real catalogue content
+    // (search button, hero, filters, cards) between the header and the
+    // footer, so the exact Tab count to get there is no longer fixed — that
+    // count is not what this assertion checks, the shared --ring token is.
+    await page.locator('#newsletter-email').focus()
+    const borderColor = await page.evaluate(() => getComputedStyle(document.activeElement!).borderColor)
+    expect(borderColor).toBe(RING_RGB)
   })
 
   test('mobile: tab-bar Home renders the --ring box-shadow on focus-visible', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 })
     await boot(page)
 
-    await page.keyboard.press('Tab') // skip-link
-    await page.keyboard.press('Tab') // Home
+    // Fase 3 insere conteúdo real de catálogo entre a search bar mobile e a
+    // tab bar (CTA do hero, filtros, cards…), então o número exato de Tabs
+    // para alcançar Home deixou de ser fixo — foca o link diretamente
+    // (`.focus()` programático ainda ativa `:focus-visible` no Chromium),
+    // preservando o que este teste de fato verifica: o token do anel.
+    await page.getByRole('navigation', { name: 'Navegação principal' }).getByRole('link').focus()
     const homeStyle = await page.evaluate(() => {
       const cs = getComputedStyle(document.activeElement!)
       return {
@@ -1099,7 +1139,9 @@ test.describe('/e2e-sandbox in production (fix iteration 1, review item 1 regres
     const consoleErrors: string[] = []
     const pageErrors: string[] = []
     page.on('console', (msg) => {
-      if (msg.type() === 'error') consoleErrors.push(msg.text())
+      // a URL vem em location(), não em text() — guardamos as duas para que os
+      // filtros abaixo possam dizer QUAL falha eles permitem
+      if (msg.type() === 'error') consoleErrors.push(`${msg.text()} ${msg.location().url}`)
     })
     page.on('pageerror', (e) => pageErrors.push(e.message))
 
@@ -1125,7 +1167,7 @@ test.describe('/e2e-sandbox in production (fix iteration 1, review item 1 regres
     // special-cased blank/empty state, the real shared 404 boundary.
     await expect(page.getByRole('link', { name: 'KURIO' }).first()).toBeVisible()
 
-    expect(consoleErrors).toEqual([])
+    expect(consoleErrors.filter((msg) => !isExpectedBootNoise(msg))).toEqual([])
     expect(pageErrors).toEqual([])
   })
 })
@@ -1177,8 +1219,9 @@ test.describe('Focus ring on plain <Link> does not clip or overlap neighbouring 
     await page.setViewportSize({ width: 390, height: 844 })
     await boot(page)
 
-    await page.keyboard.press('Tab') // skip-link
-    await page.keyboard.press('Tab') // Home
+    // Mesmo racional do teste de ring acima: foca Home diretamente em vez
+    // de contar Tabs através do conteúdo real do catálogo.
+    await page.getByRole('navigation', { name: 'Navegação principal' }).getByRole('link').focus()
     const overflowChain = await page.evaluate(() => {
       const chain: string[] = []
       let el: Element | null = document.activeElement
@@ -1220,8 +1263,8 @@ test.describe('Focus ring on plain <Link> does not clip or overlap neighbouring 
     await page.setViewportSize({ width: 390, height: 844 })
     await boot(page)
 
-    await page.keyboard.press('Tab') // skip-link
-    await page.keyboard.press('Tab') // Home (tab-bar), shares linkFocusRing with the other 3 call-sites
+    // Mesmo racional dos dois testes acima: foca Home diretamente.
+    await page.getByRole('navigation', { name: 'Navegação principal' }).getByRole('link').focus()
 
     const { ringColorRaw, inkHex, surfaceCardHex } = await page.evaluate(() => {
       const ringColorRaw = getComputedStyle(document.activeElement!).getPropertyValue(
@@ -1302,7 +1345,9 @@ test.describe('Full breakpoint round-trip (fix iteration 1 regression): 1440 -> 
   }) => {
     const consoleErrors: string[] = []
     page.on('console', (msg) => {
-      if (msg.type() === 'error') consoleErrors.push(msg.text())
+      // a URL vem em location(), não em text() — guardamos as duas para que os
+      // filtros abaixo possam dizer QUAL falha eles permitem
+      if (msg.type() === 'error') consoleErrors.push(`${msg.text()} ${msg.location().url}`)
     })
     page.on('pageerror', (e) => consoleErrors.push(`pageerror: ${e.message}`))
 
@@ -1314,8 +1359,9 @@ test.describe('Full breakpoint round-trip (fix iteration 1 regression): 1440 -> 
     await expect(page.getByRole('link', { name: 'KURIO' }).first()).toBeFocused()
     await page.keyboard.press('Tab') // Início
     await expect(page.getByRole('link', { name: 'Início' })).toBeFocused()
-    await page.keyboard.press('Tab') // falls through disabled search/cart/Entrar to the newsletter input
-    await expect(page.locator('#newsletter-email')).toBeFocused()
+    // Fase 3: o botão de busca do header não é mais disabled (busca inline).
+    await page.keyboard.press('Tab')
+    await expect(page.getByRole('button', { name: 'Buscar' })).toBeFocused()
 
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
@@ -1347,6 +1393,6 @@ test.describe('Full breakpoint round-trip (fix iteration 1 regression): 1440 -> 
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
     ).toBe(true)
 
-    expect(consoleErrors).toEqual([])
+    expect(consoleErrors.filter((msg) => !isExpectedBootNoise(msg))).toEqual([])
   })
 })
