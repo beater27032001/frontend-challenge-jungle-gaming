@@ -144,10 +144,29 @@ test.describe('NFT catalogue', () => {
     expect(found.body.editions.length).toBeGreaterThanOrEqual(1)
     expect(typeof found.body.priceEth).toBe('string')
 
-    // External placeholder-image debt paid off (spec §5): 4 local assets cycled by index.
+    // External placeholder-image debt paid off (spec §5): 4 local assets cycled by
+    // index (fase 4: 3 -> 4 imagens, specs/04-detalhe-nft.md §2 — desktop tem 4
+    // thumbnails).
     expect(found.body.imageUrl).toBe('/nft/ape-01.webp')
-    expect(found.body.images).toEqual(['/nft/ape-01.webp', '/nft/ape-02.webp', '/nft/ape-03.webp'])
+    expect(found.body.images).toEqual([
+      '/nft/ape-01.webp',
+      '/nft/ape-02.webp',
+      '/nft/ape-03.webp',
+      '/nft/ape-04.webp',
+    ])
     expect(found.body.images[0]).toBe(found.body.imageUrl)
+  })
+
+  test('detail: fase-4 fields — ratingAvg is a 1-decimal string, ratingCount a number, attributes 3 PT strings', async ({
+    page,
+  }) => {
+    await bootReset(page)
+    const found = await apiFetch(page, '/api/nfts/nft-001')
+    expect(found.status).toBe(200)
+    expect(found.body.ratingAvg).toMatch(/^\d\.\d$/)
+    expect(typeof found.body.ratingCount).toBe('number')
+    expect(found.body.attributes).toHaveLength(3)
+    for (const attr of found.body.attributes) expect(typeof attr).toBe('string')
   })
 })
 
@@ -925,10 +944,12 @@ test.describe('Fix Plan (iteration 2): NftSummary derived fields stay coherent',
     // Fase 2 (spec §3): fixtures reconciled with the 9-category/3-network
     // design system, SEED_VERSION bumped from 1 to 2. Fase 3 bumps it again
     // to 3 (network field added to the NFT model, specs/03-catalogo.md
-    // resolução OQ3) — the spec's own "mapa de impacto" claim that no test
-    // asserts `seedVersion` missed this one; updated, not deleted (same
-    // precedent as the fase-2 category/network test updates).
-    expect(dbDump.seedVersion).toBe(3)
+    // resolução OQ3). Fase 4 bumps it again to 4 (images 3->4, ratingAvg/
+    // ratingCount/attributes added, specs/04-detalhe-nft.md §1) — the spec's
+    // own "mapa de impacto" claim that no test asserts `seedVersion` missed
+    // this one; updated, not deleted (same precedent as the fase-2/3
+    // fixture test updates).
+    expect(dbDump.seedVersion).toBe(4)
   })
 
   test('sold-out: top-level `available` (not just editions[0]) drops to 0 on both detail and list, and never contradicts editions', async ({

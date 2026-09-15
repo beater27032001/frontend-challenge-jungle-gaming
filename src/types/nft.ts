@@ -47,8 +47,11 @@ export interface NftSummary {
 
 export interface NftDetail extends NftSummary {
   description: string
-  images: string[] // galeria, 3 por NFT
+  images: string[] // galeria, 4 por NFT; images[0] === imageUrl
   editions: NftEdition[]
+  ratingAvg: string // '3.5'…'5.0', 1 casa decimal
+  ratingCount: number
+  attributes: string[] // 3 itens, PT
 }
 
 export interface NftListParams {

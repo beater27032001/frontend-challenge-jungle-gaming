@@ -8,7 +8,7 @@ import type { Db } from './db'
  * tables and the loop index so two fresh builds are byte-identical.
  */
 
-export const SEED_VERSION = 3
+export const SEED_VERSION = 4
 
 // --- fixed tables -----------------------------------------------------
 
@@ -33,6 +33,35 @@ const PRICE_TABLE = [
   '3.5',
   '12.5',
 ]
+
+// Fase 4 (specs/04-detalhe-nft.md): tabelas PT duplicadas da fixture, não
+// importadas de `src/features/` (mocks não devem depender de features).
+const CATEGORY_LABELS_PT: Record<NftCategory, string> = {
+  art: 'Arte digital',
+  photography: 'Fotografia',
+  music: 'Música',
+  'art-3d': 'Arte 3D',
+  collectibles: 'Colecionáveis',
+  generative: 'Generativa',
+  gaming: 'Jogos',
+  memberships: 'Assinaturas',
+  utility: 'Utilidade',
+}
+const NETWORK_LABELS_PT: Record<Network, string> = {
+  ethereum: 'Ethereum',
+  polygon: 'Polygon',
+  solana: 'Solana',
+}
+const RARITY_LABELS_PT: Record<NftRarity, string> = {
+  common: 'Comum',
+  rare: 'Raro',
+  epic: 'Épico',
+  legendary: 'Lendário',
+}
+// Atributos de mock (Figma: "Óculos, Esmeralda, Raro"), conteúdo fictício
+// legítimo — o traço/pedra + a raridade da própria fixture.
+const TRAIT_A = ['Óculos', 'Capacete', 'Coroa', 'Máscara']
+const TRAIT_B = ['Esmeralda', 'Rubi', 'Safira', 'Âmbar', 'Ônix']
 
 const ADJECTIVES = [
   'Solar',
@@ -138,9 +167,14 @@ function buildNft(i: number): NftDetail {
     likes: (i * 37) % 500,
     createdAt,
     version: 1,
-    description: `${title} is a GreenMint original from the ${category} collection, ${rarity} rarity.`,
-    images: [0, 1, 2].map((n) => `/nft/ape-0${((i + n) % 4) + 1}.webp`),
+    description: `${title} é um colecionável digital da coleção ${CATEGORY_LABELS_PT[category]}, finalizado à mão, verificado na ${NETWORK_LABELS_PT[network]}, com arte desbloqueável e acesso para colecionadores.`,
+    // Fase 4: 4 imagens por NFT (desktop tem 4 thumbnails, 10:244) — antes 3.
+    // `images[0] === imageUrl` preservado.
+    images: [0, 1, 2, 3].map((n) => `/nft/ape-0${((i + n) % 4) + 1}.webp`),
     editions,
+    ratingAvg: ((35 + (i * 7) % 16) / 10).toFixed(1),
+    ratingCount: 7 + ((i * 13) % 43),
+    attributes: [TRAIT_A[i % 4], TRAIT_B[i % 5], RARITY_LABELS_PT[rarity]],
   }
   refreshNftDerived(nft)
   return nft
