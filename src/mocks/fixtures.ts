@@ -8,7 +8,7 @@ import type { Db } from './db'
  * tables and the loop index so two fresh builds are byte-identical.
  */
 
-export const SEED_VERSION = 4
+export const SEED_VERSION = 5
 
 // --- fixed tables -----------------------------------------------------
 
@@ -109,6 +109,28 @@ function pad(n: number): string {
   return String(n).padStart(3, '0')
 }
 
+// Fase 4, ciclo de correção (review item 1, opção A): o Figma mostra `1/1`,
+// `1/10`, `1/50`, `ABERTA` nos chips de edição — não os nomes fantasia
+// "Standard"/"Deluxe" que a fase 4 original usou. O label passa a ser
+// GERADO de `totalSupply` (não um valor arbitrário na fixture): `null` é a
+// edição aberta (sem cap fixo) e vira "ABERTA"; qualquer outro número vira
+// `1/{totalSupply}`.
+//
+// `totalSupply` em si (10 para a e1, 3 para a e2) fica como estava: dezenas
+// de asserções em `e2e/api-contracts.spec.ts` (decrementos 10→9→8→7→6,
+// reset para 10, soma 13, etc. — mapeado antes de tocar aqui, mesmo cuidado
+// da fase 2) dependem desses números exatos. Variar `totalSupply` por NFT
+// para produzir literalmente `1/1`/`1/50` quebraria esse contrato numérico
+// sem necessidade: o precedente das fases 2/3 é alinhar o FORMATO do dado
+// ao design (como o preço já é mock, não a cópia exata do Figma), não
+// replicar o valor literal do mock do Figma. `ABERTA` (totalSupply `null`)
+// é suportada pelo tipo e por esta função, mas nenhuma edição da seed atual
+// a usa, pelo mesmo motivo — fica para quando uma fase futura precisar de
+// uma edição sem cap.
+function editionLabel(totalSupply: number | null): string {
+  return totalSupply === null ? 'ABERTA' : `1/${totalSupply}`
+}
+
 function buildNft(i: number): NftDetail {
   const id = `nft-${pad(i + 1)}`
   const category = CATEGORIES[i % 9]
@@ -125,17 +147,17 @@ function buildNft(i: number): NftDetail {
   const editions: NftEdition[] = [
     {
       id: `${id}-e1`,
-      label: 'Standard',
+      label: editionLabel(10),
       priceEth: basePrice,
       totalSupply: 10,
       available: 10,
     },
   ]
-  // Every 4th NFT (nft-004, nft-008, ...) also ships a Deluxe edition.
+  // Every 4th NFT (nft-004, nft-008, ...) also ships a second edition.
   if ((i + 1) % 4 === 0) {
     editions.push({
       id: `${id}-e2`,
-      label: 'Deluxe',
+      label: editionLabel(3),
       priceEth: roundEth(eth(basePrice).times(2)),
       totalSupply: 3,
       available: 3,
@@ -266,7 +288,7 @@ export function buildInitialDb(): Db {
             nftId: 'nft-002',
             editionId: 'nft-002-e1',
             title: nfts[1].title,
-            editionLabel: 'Standard',
+            editionLabel: editionLabel(10), // nft-002-e1
             quantity: 1,
             unitPriceEth: ord1UnitPrice,
             lineTotalEth: ord1UnitPrice,

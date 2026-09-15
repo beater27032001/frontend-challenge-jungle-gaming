@@ -23,9 +23,9 @@ export type NftSort = 'newest' | 'price-asc' | 'price-desc' | 'popular'
 
 export interface NftEdition {
   id: string // `${nftId}-e1`
-  label: string // "Standard" | "Deluxe"
+  label: string // "1/{totalSupply}" (ex.: "1/10") ou "ABERTA" quando totalSupply é null
   priceEth: EthAmount
-  totalSupply: number // inteiro
+  totalSupply: number | null // inteiro; null = edição aberta, sem cap fixo (chip "ABERTA")
   available: number // inteiro, 0 = esgotada
 }
 
