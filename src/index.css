@@ -116,6 +116,15 @@
     @apply border-border;
   }
 
+  /* O Tailwind v4 deixou de dar `cursor: pointer` a button/[role=button] no
+     preflight. Uma regra aqui em vez de `cursor-pointer` espalhado por N
+     componentes — e elemento desabilitado continua sem o cursor de clique. */
+  button:not(:disabled),
+  [role='button']:not([aria-disabled='true']),
+  summary {
+    cursor: pointer;
+  }
+
   body {
     @apply bg-background text-foreground font-sans antialiased;
   }

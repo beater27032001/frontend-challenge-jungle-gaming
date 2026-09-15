@@ -44,7 +44,10 @@ function Slider({
       <SliderPrimitive.Track
         data-slot="slider-track"
         className={cn(
-          "relative grow overflow-hidden rounded-full bg-muted data-[orientation=horizontal]:h-1.5 data-[orientation=horizontal]:w-full data-[orientation=vertical]:h-full data-[orientation=vertical]:w-1.5"
+          // Calibração (fase 3, specs/03-catalogo.md resolução OQ3): trilho
+          // inativo em border-soft; cor de preenchimento não estava
+          // transcrita até esta fase.
+          "relative grow overflow-hidden rounded-full bg-border-soft data-[orientation=horizontal]:h-1.5 data-[orientation=horizontal]:w-full data-[orientation=vertical]:h-full data-[orientation=vertical]:w-1.5"
         )}
       >
         <SliderPrimitive.Range
@@ -59,7 +62,7 @@ function Slider({
           data-slot="slider-thumb"
           key={index}
           aria-label={thumbLabels?.[index]}
-          className="block size-[15px] shrink-0 rounded-full border border-primary bg-white shadow-sm ring-ring/50 transition-[color,box-shadow] hover:ring-4 focus-visible:ring-4 focus-visible:outline-hidden disabled:pointer-events-none disabled:opacity-50"
+          className="block size-[15px] shrink-0 rounded-full border border-primary bg-primary shadow-sm ring-ring/50 transition-[color,box-shadow] hover:ring-4 focus-visible:ring-4 focus-visible:outline-hidden disabled:pointer-events-none disabled:opacity-50"
         />
       ))}
     </SliderPrimitive.Root>
