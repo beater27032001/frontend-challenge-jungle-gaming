@@ -131,8 +131,100 @@ Existem desde a fase 1 e **nunca tiveram consumidor real**:
 O `order-timeout` é o mais importante: primeira tentativa falha como erro de rede,
 e a recuperação por idempotência precisa devolver o **mesmo** pedido.
 
-## 6. Pendência de extração
+## 6. Mobile — `16:748` (414×896)
 
-`[EXTRAÇÃO PENDENTE]` o mobile (`16:748`) não foi extraído, e a Confirmação **não
-tem frame mobile** — o `CLAUDE.md` já registra que precisa funcionar mesmo assim,
-derivando do padrão dos outros frames mobile.
+Extraído. Uma única coluna `Content` (`70398:239`, `x 28, y 32, 358×832`) com dois
+filhos: o bloco de conteúdo (`70410:4218`, 358×605) e o **Confirm Button**
+(`70398:249`, `y 772, 358×60`) — ou seja, há **107px de folga** entre o fim do
+conteúdo e o botão. Não é barra fixa: é o último elemento da coluna.
+
+Diferença estrutural relevante: **o mobile não tem formulário de pagamento**.
+Onde o desktop pede nove campos, o mobile pede só a escolha de carteira. Isso
+ajuda a resolver a tensão registrada na seção 3 — ver 6.6.
+
+### 6.1 Screen Header — `70398:240` (358×44)
+
+Idêntico ao do carrinho mobile: círculo 35×35 + `Arrow-Left 2` 20×20 em `+7,+7`.
+Título "Pagamento com carteira" em `x 59, y 9`, **20px bold, lh 16**.
+
+### 6.2 Barra "Carteira conectada" — `70304:365` (y 60, h 16)
+
+`justify-between`. Esquerda "Carteira conectada" 16px bold `foreground`; direita
+"Trocar carteira" **14px bold** `text-accent` — é ação, precisa ser `<button>`.
+
+### 6.3 Wallet Cards — `70398:241` (y 92, gap 20)
+
+Dois cards `358×93`, `bg surface-card`, **raio 14**.
+
+| Elemento | Posição | Estilo |
+| --- | --- | --- |
+| Radio/indicador | `x 19, y 38–39, 16×16` | ver abaixo |
+| Nome | `x 54, y 15–16` | 16px bold, `foreground` |
+| Detalhe (2 linhas) | `x 54, y 38, w ~202` | 14px regular, **lh 22**, `text-secondary` |
+| Menu `⋮` | `x 336, y 39, 3×15` | `Group 87`/`Group 88` |
+
+- **Reserva** (`70398:242`): `nova.kurio.eth` / `Rede Polygon`. Indicador
+  `Group 90` (não-selecionado). Tem sombra `0 20px 20px rgba(10,6,4,0.45)`.
+- **Principal** (`70398:243`): `0xA91F…E82C` / `Rede principal Ethereum`.
+  Indicador `Ellipse 46` (**selecionado**). Sem sombra.
+
+⚠️ A sombra está no card **não-selecionado** e o selecionado é o plano. Contra a
+intuição; transcrito como está. O estado selecionado se distingue pelo indicador,
+não pela elevação — logo o indicador **não pode ser só cor**: usar `role="radio"`
++ `aria-checked` e um preenchimento visível, não um tom diferente do mesmo círculo.
+
+### 6.4 Wallet Options — `70398:244` (y 314, 359 largura, gap 16)
+
+Título "Carteira e rede" 16px bold. Três opções `359×65`, `bg surface-card`,
+**raio 15**, cada uma com:
+
+| Elemento | Posição | Estilo |
+| --- | --- | --- |
+| Avatar | `x 14, y 13, 40×40` | círculo (`Ellipse 44`) |
+| Marca | `x ~27, y 24` | 14px bold, `text-accent` — glifo "W"/"M" |
+| Nome | `x 65, y 25` | 14px regular, `foreground` |
+| Indicador | `x 326, y 25, 16×16` | `Ellipse 45`/`43` selecionado; `Group 89` não |
+
+- WalletConnect — sombra `0 0 20px`; marca "W"; **selecionado**
+- MetaMask — sombra `0 0 20px`; marca "M"; **selecionado**
+- Coinbase Wallet — sombra `0 0 40px`; ícone `Iconly/Curved/Wallet` 24×24 em
+  `x 22, y 21`; **não selecionado**
+
+⚠️ **Duas opções aparecem selecionadas ao mesmo tempo.** É erro de estado no
+Figma, não multi-seleção. Implementar como radiogroup de seleção única.
+
+⚠️ Os nós `16:918` (Frame) e `16:915` (Group 86, um `paypal 1`) estão
+**`hidden="true"`** — resíduo de um desenho anterior com PayPal. Ignorar: este
+fluxo é só carteira.
+
+### 6.5 Total Row — `70398:248` (y 589, h 16)
+
+`justify-end`, gap 28 entre label e valor: "Total:" 16px bold `foreground` e
+`8.936 ETH` **18px bold `text-accent`**, alinhado à direita. Mesmo par do carrinho
+mobile — e o **mesmo valor**, o que confirma que a cotação atravessa as duas telas.
+
+### 6.6 Confirm Button — `70398:249` (y 772, 358×60)
+
+Raio 40, "Confirmar compra" **15px bold** em `ink`, gradiente
+`108.48deg, #d28a4c 3.96% → rgba(210,138,76,0.8) 121.97%` — praticamente o mesmo
+do CTA do carrinho (108.86deg), com 15px em vez de 16px.
+
+### 6.7 A tensão dos nove campos, resolvida pelo mobile
+
+O mobile não coleta nome nem e-mail: coleta **carteira e rede**. Isso reforça a
+recomendação já feita na seção 3 — renderizar e validar o que o desenho pede, e
+enviar só `payer: { name, email }`, que é o que `src/types/order.ts:15` aceita.
+No mobile, `payer` vem da sessão (fase 5), não de campo de formulário.
+
+Decisão a confirmar antes de implementar: se o mobile é o comportamento canônico,
+os nove campos do desktop são **supérfluos ao contrato** e viram campos de
+apresentação. Alternativa honesta e mais barata: no mobile, seguir o desenho
+exatamente; no desktop, manter os nove campos com validação real mas mapeando
+apenas os dois que o contrato aceita.
+
+### 6.8 Confirmação em mobile
+
+**Não existe frame mobile.** O `CLAUDE.md` já registra que precisa funcionar.
+Derivar do modal desktop (`70376:239`, 578×821) como folha inferior no padrão do
+Payment Summary do carrinho mobile: `rounded-t-[40px]`, `bg surface-card`,
+`pt-24 px-24 pb-36`. Registrar a derivação no ARCHITECTURE.md.
