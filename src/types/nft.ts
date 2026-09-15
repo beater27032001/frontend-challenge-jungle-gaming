@@ -1,4 +1,5 @@
 import type { EthAmount } from './common'
+import type { Network } from './wallet'
 
 /** NFT catalogue contracts: list/detail shapes and list query params. */
 
@@ -34,6 +35,7 @@ export interface NftSummary {
   creator: { id: string; name: string; avatarUrl: string }
   category: NftCategory
   rarity: NftRarity
+  network: Network // resolução OQ 3 (specs/03-catalogo.md): filtro "Rede" do painel
   imageUrl: string
   priceEth: EthAmount // menor preço entre edições disponíveis (ou da 1ª, se todas esgotadas)
   available: number // soma dos available das edições
@@ -52,6 +54,7 @@ export interface NftDetail extends NftSummary {
 export interface NftListParams {
   q?: string
   category?: NftCategory
+  network?: Network
   rarity?: NftRarity
   priceMin?: EthAmount
   priceMax?: EthAmount

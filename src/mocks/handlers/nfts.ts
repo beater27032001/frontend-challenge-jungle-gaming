@@ -1,7 +1,7 @@
 import { http, HttpResponse } from 'msw'
 import { z } from 'zod'
 import { eth } from '@/lib/money'
-import { NFT_CATEGORIES } from '@/types'
+import { NETWORKS, NFT_CATEGORIES } from '@/types'
 import type { NftDetail, NftSummary, Paginated } from '@/types'
 import { db } from '../db'
 import { activeScenario, withScenario } from '../scenarios'
@@ -17,6 +17,7 @@ const boolParam = z
 const listParamsSchema = z.object({
   q: z.string().optional(),
   category: z.enum(NFT_CATEGORIES).optional(),
+  network: z.enum(NETWORKS).optional(),
   rarity: z.enum(['common', 'rare', 'epic', 'legendary']).optional(),
   priceMin: z.string().optional(),
   priceMax: z.string().optional(),
@@ -33,6 +34,7 @@ function toSummary(nft: NftDetail): NftSummary {
     creator,
     category,
     rarity,
+    network,
     imageUrl,
     priceEth,
     available,
@@ -41,7 +43,21 @@ function toSummary(nft: NftDetail): NftSummary {
     createdAt,
     version,
   } = nft
-  return { id, title, creator, category, rarity, imageUrl, priceEth, available, featured, likes, createdAt, version }
+  return {
+    id,
+    title,
+    creator,
+    category,
+    rarity,
+    network,
+    imageUrl,
+    priceEth,
+    available,
+    featured,
+    likes,
+    createdAt,
+    version,
+  }
 }
 
 export const nfts = [
@@ -70,6 +86,7 @@ export const nfts = [
 
       let list = db.nfts.filter((nft) => {
         if (params.category && nft.category !== params.category) return false
+        if (params.network && nft.network !== params.network) return false
         if (params.rarity && nft.rarity !== params.rarity) return false
         if (params.featured !== undefined && nft.featured !== params.featured) return false
         if (params.q) {
