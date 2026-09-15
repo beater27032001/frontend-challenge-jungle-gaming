@@ -56,7 +56,7 @@ function HomePage() {
         </aside>
 
         <div id="catalogo" className="flex flex-1 flex-col gap-6">
-          <CatalogToolbar search={search} total={list.data?.total} />
+          <CatalogToolbar search={search} />
           <CatalogGrid query={list} search={search} />
           <CatalogPagination page={params.page ?? 1} totalPages={list.data?.totalPages ?? 1} />
         </div>
