@@ -1,0 +1,156 @@
+@import '@fontsource-variable/roboto-mono';
+@import 'tailwindcss';
+
+/* ---------------------------------------------------------------------------
+ * Design tokens — extracted verbatim from the Figma file
+ * "Marketplace de NFTs GreenMint" (get_variable_defs on node 2:2).
+ * Do not invent values here: if a token is missing, read it from Figma.
+ * ------------------------------------------------------------------------- */
+@theme {
+  --font-mono: 'Roboto Mono Variable', ui-monospace, monospace;
+  --font-sans: 'Roboto Mono Variable', ui-monospace, monospace;
+
+  /* Brand palette (Figma: color/*) */
+  --color-ink: #140d0a;
+  --color-surface-card: #241612;
+  --color-surface-dark: #38220f;
+  --color-border-strong: #3f2319;
+  --color-border-soft: #55321f;
+  --color-primary: #d28a4c;
+  --color-secondary: #b39463;
+  --color-text-accent: #e89b55;
+  --color-text-primary: #f7f3ec;
+  --color-text-secondary: #cfb28c;
+  /* --color-foreground (#f5f1eb) e --foreground (#f7f3ec, alias abaixo de
+   * --color-text-primary) são DOIS tokens Figma distintos que só por
+   * coincidência de nome parecem duplicados (dívida 7 herdada da fase 2,
+   * fechada aqui como decisão registrada, não como bug: mudar qualquer um
+   * dos dois valores seria churn de baseline sem ganho visual). */
+  --color-foreground: #f5f1eb;
+  --color-background-elevated: #fbfbfb;
+  /* Fase 4 (specs/04-detalhe-nft.md §1): superfície elevada — já aparecia
+   * no gradiente do card mobile do catálogo, agora nomeada como token. */
+  --color-surface-raised: #2f1d15;
+  --color-amber: #e3a44e;
+
+  /* Type scale (Figma: Display / Heading / Body Large / Body / Caption / Tiny) */
+  --text-tiny-9: 0.5625rem;
+  --text-tiny-10: 0.625rem;
+  --text-caption-12: 0.75rem;
+  --text-caption-13: 0.8125rem;
+  --text-body-14: 0.875rem;
+  --text-body-15: 0.9375rem;
+  --text-body-16: 1rem;
+  --text-body-17: 1.0625rem;
+  --text-body-18: 1.125rem;
+  --text-heading-24: 1.5rem;
+  --text-display-43: 2.6875rem;
+  /* Fase 4 (specs/04-detalhe-nft.md §1). */
+  --text-title-20: 1.25rem;
+  --text-title-22: 1.375rem;
+  --text-heading-28: 1.75rem;
+
+  /* Layout: Figma desktop frame is 1440 with a 1200 content column */
+  --container-content: 75rem;
+
+  /* Skeleton shimmer (spec fase 2, Etapa 7): not a Figma value — loading
+   * states don't exist in the Figma file, this is a CHALLENGE §8 requirement.
+   * `prefers-reduced-motion` needs no extra code: the global media query
+   * below already freezes every animation, this one included. */
+  --animate-shimmer: shimmer 1.5s linear infinite;
+  @keyframes shimmer {
+    from {
+      transform: translateX(-100%);
+    }
+    to {
+      transform: translateX(100%);
+    }
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * shadcn/ui semantic aliases -> brand palette.
+ * shadcn components read these names; mapping them here means every shadcn
+ * primitive inherits the Figma identity without per-component overrides.
+ * ------------------------------------------------------------------------- */
+:root {
+  --background: var(--color-ink);
+  --foreground: var(--color-text-primary);
+  --card: var(--color-surface-card);
+  --card-foreground: var(--color-text-primary);
+  --popover: var(--color-surface-card);
+  --popover-foreground: var(--color-text-primary);
+  --primary: var(--color-primary);
+  --primary-foreground: var(--color-ink);
+  /* Sem alias --secondary aqui: `--color-secondary` (#b39463, token "Color/Secondary"
+     do Figma) já ocupa o nome, então `bg-secondary` SEMPRE significa o bege da marca.
+     Para o marrom escuro use `bg-surface-dark` explicitamente. */
+  --secondary-foreground: var(--color-ink);
+  --muted: var(--color-surface-dark);
+  --muted-foreground: var(--color-text-secondary);
+  --accent: var(--color-text-accent);
+  --accent-foreground: var(--color-ink);
+  --destructive: #e5484d;
+  --destructive-foreground: var(--color-text-primary);
+  --border: var(--color-border-strong);
+  --input: var(--color-border-soft);
+  --ring: var(--color-primary);
+
+  /* Calibrated (spec §1): 6px, measured on the Entrar/Aplicar buttons. */
+  --radius: 0.375rem;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  /* O Tailwind v4 deixou de dar `cursor: pointer` a button/[role=button] no
+     preflight. Uma regra aqui em vez de `cursor-pointer` espalhado por N
+     componentes — e elemento desabilitado continua sem o cursor de clique. */
+  button:not(:disabled),
+  [role='button']:not([aria-disabled='true']),
+  summary {
+    cursor: pointer;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+  }
+
+  /* Required by the brief: respect reduced-motion (skeleton shimmer, transitions) */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}

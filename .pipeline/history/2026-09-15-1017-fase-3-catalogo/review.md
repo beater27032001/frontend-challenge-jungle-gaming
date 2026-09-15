@@ -1,0 +1,37 @@
+# Review
+
+## Verdict
+SHIP
+
+## Rationale
+
+Baseado no diff real (`git diff` + os 13 arquivos novos em `src/features/` lidos na íntegra), nas transcrições `specs/03-catalogo.md`/`specs/02-design-system.md`, e em verificação independente na minha máquina: `pnpm typecheck`, `pnpm lint` e `pnpm build` limpos; suíte completa **325/326 com 1 flake** (detalhe no finding 2 — o teste passa 5/5 isolado; não é defeito de app).
+
+- **Estado na URL (o que mais vale nota, §3/§4):** os 7 parâmetros moram exclusivamente no `validateSearch` de `src/routes/index.tsx`. Confirmei por leitura que todo `useState` restante é rascunho legítimo (slider antes do Aplicar, texto antes do Enter, aberto/fechado da busca) e que `filter-panel.tsx`/`mobile-search-bar.tsx` resincronizam o rascunho durante o render quando a URL muda por fora. Reset de paginação está em todos os gatilhos (`page: undefined` em cada patch), e o E2E prova back/forward byte a byte com reload no meio da sequência. Sólido.
+- **Radar 1 — `parseSearch`/`stringifySearch` global em `src/main.tsx`:** sustenta-se. Parser burro (stdlib, zero JSON) + schema zod esperto por rota é a divisão de responsabilidade correta; o guard de `undefined` está lá; o teto (chave duplicada, sem arrays) está nomeado no comentário `ponytail:` e foi verificado ao vivo pelo Tester. Carrinho/checkout/perfil usam escalares planos — a única situação que força revisão é um futuro filtro multi-select, e o comentário já aponta isso. A armadilha do `parseSearchWith` documentada no código é conhecimento que impede regressão.
+- **Radar 3 — dívida de zoom: fechada de verdade.** Provada nos dois baselines (640px para 1280 e 720px para 1440, este último dirigindo as 5 categorias do footer ponta a ponta pelo Sheet), e registrada em `ARCHITECTURE.md` Fase 3 item 1. Ver finding 6 para um nit de cross-referência.
+- **Radar 4 — `empty` e `out-of-order`: dívida quitada com prova real.** `out-of-order` não é só "a tela não quebra": `catalog-tester.spec.ts` assere que o título exclusivo do filtro descartado ("Solar Drift") tem `count(0)` *depois* da resposta lenta de 1500ms aterrissar, e o `catalog-e2e-tester.spec.ts` cobre a variante composta (network + q em AND, cross-control) que satisfaz a letra "A+B combinados" do critério 16. Estruturalmente, query keys por parâmetro + `signal` repassado ao Axios tornam o clobber impossível no cache e cancelam o request em voo — os testes provam a garantia visível ao usuário.
+- **Fidelidade (radar 6):** conferi medida a medida contra as transcrições — hero desktop (copy exata, 43px/70px, CTA 140×40, arte 450 `rounded-[24px]`), hero mobile (composição própria, 18px/29px, CTA link com seta), toolbar (sublinhado 101px a 23px), card desktop (placa 300 sem raio, inset 4px, `rounded-[15px]`), card mobile (gradiente literal, badge h-8 por conteúdo, coração desabilitado), painel (310/p-5/gap-10, linhas `leading-[40px]`, selecionado bold+accent), paginação (35×35, `border-border` = `border-strong` via `index.css:82`), banner (gradiente e 310×368 exatos). Todos os desvios são os placeholders sancionados com `ponytail:` + ARCHITECTURE Fase 3 item 10. Nada inventado que a transcrição contradiga; validação fina fica para a baseline da fase 10.
+- **Correções dos dois ciclos:** ambas atacam a classe, não a instância, e ambas verificadas contra o fonte pinado e empiricamente. `activeOptions={{ exact: true }}` é a opção pública correta; o re-teste da iteração 2 rodou as asserções negativas que faltavam à suíte inteira. A migração dos 216 legados é honesta — asserções atualizadas têm comentário explicando o porquê, nenhum teste deletado, e o gate de console agora declara exatamente o que tolera (`isExpectedBootNoise` escopado a `/api/auth/session`, com teste de unidade e de integração próprios).
+- **Testes decorativos? Não.** As tabelas de cobertura batem com o que li nos specs; os "NOT COVERED" implícitos (long-session etc.) foram cobertos pelo estágio E2E; os casos de falha (400 de `network=bitcoin`, `priceMin>priceMax`, `?page=99` com filtro real de 2 páginas) existem e asseram o comportamento errado-não-acontece, não só o certo-acontece.
+
+Tudo que encontrei é [minor]; nada altera comportamento, segurança ou escopo. Os itens abaixo são candidatos naturais ao começo da fase 4.
+
+## Findings
+
+- [minor] `src/features/auth/use-session.ts:11` — o docblock ainda afirma "the clean-boot console stays silent", que é exatamente a alegação falsa que o Ponytail (`.pipeline/changes.md`, fix #2) declarou ter corrigido: o Chromium loga o 401 na camada de rede independente do tratamento (é a razão de existir `isExpectedBootNoise` em `e2e/helpers.ts`). A correção descrita no handoff **não está na árvore** — ou foi perdida, ou o relato é impreciso. Comportamento intacto; corrigir o comentário (e o registro serve de alerta de acurácia de handoff).
+- [minor] `e2e/catalog.spec.ts:387-391` — flake real: 1 falha no meu run completo paralelo (mobile-chromium, "Buscar" não focado após 4 Tabs), 5/5 verde isolado. Causa: preâmbulo com contagem fixa de Tabs sem asserção intermediária, mesma classe do flake de slider que o E2E caracterizou. Além disso, o teste cobre o critério 27 por `.focus()` pontual, não pelo passeio de Tab completo que o critério enuncia — risco residual baixo (zero `tabIndex` em `src/`, ordem natural do DOM), mas a garantia é mais fraca que a letra. Endurecer: asserir foco após cada Tab do preâmbulo.
+- [minor] `src/components/layout/footer.tsx:84` — a variante sinalizada: o `<Link search={{ category }}>` literal ganha `aria-current="page"` injetado pelo router por match parcial — inclusive quando a URL carrega `sort`/`page` que o clique descartaria (verificado pelo Tester em `/?category=music&sort=popular&page=2`). Meu julgamento: **comportamento aceitável, não bug** — nunca há dois simultâneos, o marcado é sempre a categoria de fato ativa, e "coleção corrente" é semântica defensável. Mas é decisão implícita: na fase 4, ou alinhar com `activeOptions={{ exact: true }}` por precisão semântica, ou registrar a aceitação em `ARCHITECTURE.md`.
+- [minor] `e2e/catalog.spec.ts` + `e2e/catalog-tester.spec.ts` + `e2e/catalog-e2e-tester.spec.ts` — o padrão "um spec por agente" da fase 1 voltou: 3 arquivos, 1.346 linhas, um domínio. O conteúdo é complementar (não duplicado — o Tester fortalece, o E2E cobre sessão/breakpoint/zoom), mas a organização é artefato de processo vazando para o repositório. Consolidar por domínio no início da fase 4, mesmo precedente da fase 2 (que fez exatamente isso e funcionou).
+- [minor] `src/features/nft/components/catalog-toolbar.tsx:78` — prop `total` declarada e recebida de `index.tsx`, nunca usada. API morta; remover ou consumir.
+- [minor] `ARCHITECTURE.md:15-24` — a decisão 2 da fase 2 mantém o texto de expiração original sem apontar para a resolução (a spec pedia "substituindo o texto de expiração"). A seção Fase 3 item 1 resolve o mérito; falta uma linha de cross-ref no texto antigo para quem ler só a fase 2.
+
+## Required before merge
+
+None. Os seis findings são [minor] e não bloqueiam; recomendo levar os itens 1, 2, 4 e 5 para o primeiro commit da fase 4 (o 3 e o 6 são decisões de registro que podem ir junto).
+
+---
+
+**Nota do orquestrador:** o finding 1 foi corrigido e verificado logo após esta revisão
+(`assert` na âncora antes de substituir e no conteúdo relido depois de escrever).
+Registro da causa em `.pipeline/changes.md`, seção "Correção pós-revisão".
