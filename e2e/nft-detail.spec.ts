@@ -529,3 +529,127 @@ test.describe('Voltar mobile (edge case)', () => {
     await expect(page).toHaveURL('/')
   })
 })
+
+/**
+ * E2E tester (fase 4) — cobre só o que exige o sistema de pé, fora da
+ * fronteira do Tester unitário: o estado de compra é elevado à rota e as
+ * duas composições montam simultaneamente (`hidden lg:*`); nada no spec
+ * já rodado exercita uma seleção real seguida de resize de viewport, nem a
+ * travessia catálogo→detalhe→relacionado→volta em sessão contínua.
+ */
+test.describe('Travessia de breakpoints com estado de compra elevado (foco E2E tester)', () => {
+  test('selecionar edição+quantidade em 1440 sobrevive ao resize para 390, e volta — as duas composições concordam', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await bootReset(page)
+    await page.goto('/nft/nft-004') // Standard (available 10) + Deluxe (available 3)
+
+    const deluxeDesktop = page.locator('label[for="edition-desktop-nft-004-e2"]')
+    await deluxeDesktop.click()
+    await expect(page.locator('input[name="edition-desktop"][value="nft-004-e2"]')).toBeChecked()
+
+    // Sobe a quantidade para 2 (Deluxe tem available: 3) — o Buy Bar mobile
+    // não está montado nesta viewport, então o stepper visível é o desktop.
+    await page.getByRole('button', { name: 'Aumentar quantidade' }).first().click()
+    const quantityDesktop = page.locator('span[aria-live="polite"]').first()
+    await expect(quantityDesktop).toHaveText('Quantidade: 2')
+
+    await page.setViewportSize({ width: 390, height: 844 })
+
+    // Mesma rota, mesmo estado elevado: a composição mobile — agora visível —
+    // tem que refletir a mesma edição e a mesma quantidade, sem re-selecionar.
+    await expect(page.locator('input[name="edition-mobile"][value="nft-004-e2"]')).toBeChecked()
+    const quantityMobile = page.locator('span[aria-live="polite"]').last()
+    await expect(quantityMobile).toHaveText('Quantidade: 2')
+
+    // E de volta: nenhuma composição reseta o estado ao trocar de breakpoint
+    // outra vez.
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await expect(page.locator('input[name="edition-desktop"][value="nft-004-e2"]')).toBeChecked()
+    await expect(quantityDesktop).toHaveText('Quantidade: 2')
+  })
+})
+
+test.describe('Sessão contínua: catálogo → detalhe → relacionado → volta (foco E2E tester)', () => {
+  test('filtros e paginação sobrevivem ao entrar no detalhe, navegar por um relacionado e voltar duas vezes', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await bootReset(page)
+
+    const filteredUrl = '/?category=art&network=polygon&page=1'
+    await page.goto(filteredUrl)
+    expect(await page.evaluate(() => location.search)).toContain('category=art')
+
+    const firstCard = page.getByRole('link').filter({ hasText: /ETH/ }).first()
+    await firstCard.click()
+    await expect(page).toHaveURL(/\/nft\/nft-\d+/)
+    const firstDetailUrl = page.url()
+
+    // Do detalhe, entra em outro NFT pelo carrossel de relacionados.
+    // Sob `pnpm test` completo (paralelismo pesado), ler o primeiro card
+    // antes da seção "Mais desta coleção" assentar (a query de
+    // relacionados ainda resolvendo) já foi visto devolver uma lista vazia
+    // — não reproduzido isoladamente nem com CPU throttling de até 20×.
+    // Esperar o heading da seção (só existe quando a lista de relacionados
+    // já chegou com itens) antes de ler qualquer card converte essa corrida
+    // em espera determinística.
+    await expect(page.getByRole('heading', { name: 'Mais desta coleção' })).toBeVisible()
+
+    // Foco + Enter em vez de clique: um clique físico apurado num ponto que
+    // se move (o carrossel pode reajustar o layout nos primeiros frames)
+    // erra o alvo sem lançar erro — foco não depende de coordenada nem de
+    // estabilidade de layout.
+    const relatedCard = page.locator('a[href^="/nft/"]').filter({ has: page.locator('img') }).first()
+    const relatedHref = await relatedCard.getAttribute('href')
+    await relatedCard.focus()
+    await page.keyboard.press('Enter')
+    await expect(page).toHaveURL(relatedHref!, { timeout: 10_000 })
+    expect(page.url()).not.toBe(firstDetailUrl)
+
+    // Volta pelo histórico: primeiro para o detalhe original...
+    await page.goBack()
+    await expect(page).toHaveURL(firstDetailUrl)
+
+    // ...depois para o catálogo, com os filtros e a página intactos.
+    await page.goBack()
+    const search = await page.evaluate(() => location.search)
+    expect(search).toContain('category=art')
+    expect(search).toContain('network=polygon')
+  })
+})
+
+test.describe('Shell muda em /nft/* nos dois sentidos, sem órfão (foco E2E tester)', () => {
+  test('mobile: MobileSearchBar/TabBar somem ao entrar e reaparecem ao voltar; Buy Bar some ao sair; sem sobreposição', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 })
+    await bootReset(page)
+
+    await page.goto('/')
+    await expect(page.getByPlaceholder('Explorar coleções')).toHaveCount(1)
+    const tabBar = page.getByRole('navigation', { name: 'Navegação principal' })
+    await expect(tabBar).toHaveCount(1)
+    await expect(page.getByRole('button', { name: 'Comprar NFT' })).toHaveCount(0)
+    const tabBarBox = (await tabBar.boundingBox())!
+
+    await page.goto('/nft/nft-001')
+    // DOM count, não só visibilidade — órfão seria o nó continuar montado
+    // (ex.: `hidden`) enquanto a Buy Bar ocupa o mesmo espaço.
+    await expect(page.getByPlaceholder('Explorar coleções')).toHaveCount(0)
+    await expect(page.getByRole('navigation', { name: 'Navegação principal' })).toHaveCount(0)
+    const buyBar = page.getByRole('button', { name: 'Comprar NFT' }).locator('..')
+    await expect(page.getByRole('button', { name: 'Comprar NFT' })).toBeVisible()
+    const buyBarBox = (await buyBar.boundingBox())!
+    // A Buy Bar ocupa o fundo onde a TabBar estava — mesma faixa, um único
+    // dono por vez, não os dois desenhando ao mesmo tempo.
+    expect(buyBarBox.y).toBeGreaterThanOrEqual(tabBarBox.y - 40)
+
+    // E de volta: a TabBar/MobileSearchBar reaparecem, a Buy Bar não persiste.
+    await page.goBack()
+    await expect(page.getByPlaceholder('Explorar coleções')).toHaveCount(1)
+    await expect(page.getByRole('navigation', { name: 'Navegação principal' })).toHaveCount(1)
+    await expect(page.getByRole('button', { name: 'Comprar NFT' })).toHaveCount(0)
+  })
+})

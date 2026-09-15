@@ -1,5 +1,16 @@
 import { expect, test } from '@playwright/test'
-import { ANA, apiFetch, boot, bootReset, isExpectedBootNoise, login, reset, setScenario } from './helpers'
+import {
+  ANA,
+  apiFetch,
+  boot,
+  bootReset,
+  isExpectedBootNoise,
+  login,
+  pressArrowAndWaitValue,
+  pressFirstTab,
+  reset,
+  setScenario,
+} from './helpers'
 
 /**
  * Catalogue domain spec (specs/03-catalogo.md + specs/02-design-system.md
@@ -73,9 +84,15 @@ test.describe('URL is the source of truth for search/filter/sort/page', () => {
 
     // Any filter/sort/search change resets pagination (criterion 3): applying
     // a network filter must drop `page` from the URL.
+    //
+    // `.click()` resolve não garante que `navigate()` (assíncrono) já
+    // escreveu a URL nova — uma leitura única de `location.search` correndo
+    // contra o clique é a mesma família do slider/facets: suposição de
+    // efeito síncrono em vez de espera explícita. `expect.poll` converte a
+    // leitura em espera determinística.
     await page.getByRole('button', { name: 'Polygon' }).click()
+    await expect.poll(() => page.evaluate(() => location.search)).toContain('network=polygon')
     let search = await page.evaluate(() => location.search)
-    expect(search).toContain('network=polygon')
     expect(search).not.toContain('page=')
 
     await page.goBack()
@@ -392,7 +409,7 @@ test.describe('Navigation and shell', () => {
     // Dívida 1 da fase 3 fechada (ARCHITECTURE.md "Dívidas para a fase 4"
     // item 1): flake de ~1 em 20 vinha de uma contagem fixa de 4 Tabs sem
     // asserção intermediária — assere o foco a cada Tab, não só no fim.
-    await page.keyboard.press('Tab') // skip-link
+    await pressFirstTab(page) // skip-link
     await expect(page.getByRole('link', { name: 'Pular para o conteúdo' })).toBeFocused()
     await page.keyboard.press('Tab') // wordmark
     await expect(page.getByRole('link', { name: 'KURIO' })).toBeFocused()
@@ -869,7 +886,10 @@ test.describe('Long session across the URL (interleaved, non-happy order)', () =
     const minThumb = page.getByRole('slider', { name: 'Preço mínimo' })
     await minThumb.click()
     await expect(minThumb).toBeFocused()
-    for (let i = 0; i < 5; i++) await page.keyboard.press('ArrowRight')
+    // Flake fase 4 (ARCHITECTURE.md fase 4 decisão 20): 5 ArrowRight cegos em
+    // sequência perdiam keydown sob paralelismo default. Assere o efeito de
+    // cada tecla antes da próxima.
+    await pressArrowAndWaitValue(minThumb, 'ArrowRight', 5)
     await page.getByRole('button', { name: 'Aplicar' }).click()
     search = await page.evaluate(() => location.search)
     expect(search).toContain('priceMin=0.05')
@@ -937,7 +957,10 @@ test.describe('Long session across the URL (interleaved, non-happy order)', () =
     const minThumb = page.getByRole('slider', { name: 'Preço mínimo' })
     await minThumb.click()
     await expect(minThumb).toBeFocused()
-    for (let i = 0; i < 5; i++) await page.keyboard.press('ArrowRight')
+    // Flake fase 4 (ARCHITECTURE.md fase 4 decisão 20): 5 ArrowRight cegos em
+    // sequência perdiam keydown sob paralelismo default. Assere o efeito de
+    // cada tecla antes da próxima.
+    await pressArrowAndWaitValue(minThumb, 'ArrowRight', 5)
     await page.getByRole('button', { name: 'Aplicar' }).click()
     const searchH5 = await page.evaluate(() => location.search)
     expect(searchH5).toContain('priceMin=0.05')
@@ -1019,7 +1042,7 @@ test.describe('Breakpoint crossing with shared URL state (desktop panel vs mobil
     const minThumb = page.getByRole('slider', { name: 'Preço mínimo' })
     await minThumb.click()
     await expect(minThumb).toBeFocused()
-    for (let i = 0; i < 3; i++) await page.keyboard.press('ArrowRight')
+    await pressArrowAndWaitValue(minThumb, 'ArrowRight', 3)
     await page.getByRole('button', { name: 'Aplicar' }).click()
     const search = await page.evaluate(() => location.search)
     expect(search).toContain('network=polygon')
