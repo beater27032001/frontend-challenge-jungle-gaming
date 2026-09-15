@@ -205,7 +205,11 @@ export function NftDetailMobile(props: NftDetailViewProps) {
             type="button"
             disabled={!selectedEdition || isBuying}
             onClick={onBuy}
-            className="flex h-[60px] w-[196px] items-center justify-center rounded-[40px] pl-[48px] pr-[44px] py-[20px] text-body-16 font-bold leading-[20px] text-ink disabled:opacity-50"
+            // O pl-48/pr-44 do Figma vinha do auto-layout dele e, com a nossa métrica
+            // de Roboto Mono, deixa 104px para um texto de ~106px — "Comprar NFT"
+            // quebrava em duas linhas. O padding era redundante com justify-center;
+            // a geometria medida (196x60) fica, o padding sai.
+            className="flex h-[60px] w-[196px] items-center justify-center rounded-[40px] text-body-16 font-bold leading-[20px] whitespace-nowrap text-ink disabled:opacity-50"
             style={{
               background: 'linear-gradient(100.37deg, #d28a4c 3.96%, rgba(210,138,76,0.8) 121.97%)',
             }}
