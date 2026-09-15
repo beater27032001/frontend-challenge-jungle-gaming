@@ -76,7 +76,7 @@ export function SortSelect({
   )
 }
 
-export function CatalogToolbar({ search }: { search: CatalogSearch; total: number | undefined }) {
+export function CatalogToolbar({ search }: { search: CatalogSearch }) {
   const navigate = useNavigate({ from: '/' })
   const tab = activeTab(search.sort)
 
