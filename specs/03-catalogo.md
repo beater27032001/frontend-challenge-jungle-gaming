@@ -23,6 +23,19 @@ Figma `BliVZDosX5BcSpvhYvdE0V`. Desktop `2:2` · Mobile `14:5226`.
 | Arte | 450×450, `rounded-[24px]`, `object-cover` |
 | Paginação | 3 pontos, 40×8, abaixo do CTA (gap 44) |
 
+**Estrutura de gaps — aninhada, não chapada** (`70342:2672`). Transcrever só os
+tamanhos não bastou: o aninhamento é que produz o ritmo vertical.
+
+```
+flex-col gap-[44px] items-end w-[600px]   ← items-end joga os pontos à DIREITA
+├ flex-col gap-[32px] w-full
+│ ├ flex-col gap-[4px] w-full
+│ │ ├ flex-col gap-[8px]   (sobretítulo + título)
+│ │ └ parágrafo
+│ └ CTA
+└ pontos
+```
+
 Copy exata do texto: "Descubra NFTs selecionados de criadores emergentes e
 consagrados. Colecione arte digital rara, apoie artistas e tenha uma parte da
 cultura da internet."
