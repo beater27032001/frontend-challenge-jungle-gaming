@@ -217,3 +217,84 @@ pegou conferindo. Ao montar a lista da fase 5, **verificar cada item contra a
     Para filtrar no meio da lista o usuário precisa rolar até o topo. Está
     **fiel ao Figma**, que não mostra barra fixa — mas é fricção real, e vale
     reconsiderar se a fidelidade permitir.
+
+
+## Fase 4 — Detalhes do NFT
+
+1. **Favoritar desabilitado nesta fase** — favoritos exigem sessão (fase 5);
+   a atualização otimista com rollback (specs/04-detalhe-nft.md §4) entra
+   junto dos favoritos reais, não aqui. O botão desktop (130×40) e o coração
+   do hero mobile existem, posicionados por design, `disabled`.
+2. **`ratingAvg`/`ratingCount`/`attributes` entram em `NftDetail`** (mesmo
+   racional da resolução `network` da fase 3): o design exibe avaliação e
+   atributos e o modelo não tinha o dado. Fixture determinística
+   (`src/mocks/fixtures.ts`), zero PRNG. `SEED_VERSION` 3→4; `images` 3→4
+   (o desktop tem 4 thumbnails, `10:244`).
+3. **"Coleção" nos metadados do detalhe = rótulo PT da `category`** — o
+   produto já chama categorias de "Coleções" no filtro e no footer;
+   "Kurio Apes" no Figma é conteúdo de exemplo, não um campo novo.
+4. **Preço no detalhe**: desktop mostra o preço unitário da edição
+   selecionada; a Buy Bar mobile mostra `mulQty(priceEth, quantity)`
+   (`src/lib/money.ts`, big.js). O Figma só desenha números estáticos —
+   decisão de qual multiplicar registrada aqui, não inventada no componente.
+5. **Pontos do hero mobile do detalhe são funcionais** (4 imagens reais na
+   galeria), ao contrário dos decorativos do hero do catálogo (decisão 7 da
+   fase 3): a composição pill-ativo + círculos foi verificada no SVG
+   exportado (resolução OQ4 do Planner) só para este hero — **não**
+   extrapolada para os heroes do catálogo, cujos SVGs não foram lidos.
+6. **Em `/nft/*` mobile não há `MobileSearchBar` nem `TabBar`** (frame
+   `15:5536` não as desenha); a Buy Bar fixa ocupa o fundo, e o `<main>`
+   troca `pb-[126px]` por `pb-[164px]` nessas rotas (`__root.tsx`, via
+   `useLocation`). O header desktop de telas de mercado é sem divisor
+   (`withDivider={false}`, doc do componente, specs/02-design-system.md §2).
+7. **Compartilhar = links reais de share** (LinkedIn/mailto/Twitter intent)
+   em nova aba — comportamento coerente sem aparentar um recurso inexistente.
+   Glifos lucide genéricos provisórios (`Link2`/`Mail`/`AtSign` — lucide v1
+   não distribui ícones de marca), mesmo precedente dos ícones sociais do
+   footer (decisão 3 da fase 2).
+8. **Descrição mobile = a mesma descrição da API com `line-clamp-3`** (71px
+   ≈ 3 linhas de 24px no frame) — não um texto mais curto separado; a copy
+   mobile "mais curta" do Figma é o efeito do clamp, não outro dado.
+9. **Estado "esgotado" e demais estados não desenhados** (skeleton/404/erro
+   transitório) seguem o padrão visual já estabelecido nas fases 2/3
+   (CHALLENGE §1), sem frame próprio no Figma para copiar.
+10. **Carrossel "Mais desta coleção" padronizado deliberadamente** (placa
+    219×255 sem raio, arte 212×212 `rounded-[13px]` centralizada): o Figma
+    varia paddings e alterna raio 11/13 entre os 5 cards — inconsistência do
+    arquivo, não intenção de design (specs/04-detalhe-nft.md §3 mandou
+    registrar o desvio).
+11. **Lupa da imagem principal = Dialog com a imagem ampliada** — comportamento
+    honesto para um affordance de zoom desenhado sem estado aberto no Figma
+    (resolução OQ2 do Planner). Cross-ref: mesmo critério de "zoom" da
+    decisão 2 da fase 2 (equivalência funcional, não decorativa).
+12. **Provisórios com `ponytail:` (extração fina pendente):**
+    - tipografia e distribuição vertical do breadcrumb "Início / Mercado"
+      (só a caixa 145×16 foi extraída do frame `10:244`, resolução OQ5);
+    - padding horizontal (`px-4`) dos chips-elipse de edição (resolução OQ3);
+    - composição interna dos dots do carrossel desktop "Mais desta coleção"
+      (52×12 — espelha, até extração, a composição verificada do hero mobile:
+      pill ativo + círculos, resolução OQ4; **não** vale para os heroes do
+      catálogo, cujos SVGs não foram lidos).
+    - O offset de 24px do container `Top` acima do header (frame `10:244`)
+      não é aplicado: é margem do frame, e o shell compartilhado não a tem
+      em nenhuma rota.
+13. **Dívida 3 da fase 3 (footer `aria-current` por match parcial) aceita
+    como decisão consciente** — nunca há dois links de coleção simultâneos
+    ativos, e "coleção corrente" é semântica defensável para o match
+    parcial. **Dívida 5 da fase 3**: esta entrada 11 acima é a cross-ref
+    pendente, ligando o zoom do detalhe à decisão 2 da fase 2.
+14. **Dívida 4 da fase 3 fechada**: `catalog-tester.spec.ts` e
+    `catalog-e2e-tester.spec.ts` fundidos em `e2e/catalog.spec.ts` como
+    `describe`s — nenhum teste perdido, mesmo movimento da fase 2 (specs/02
+    §6). **Dívida 1 fechada**: o preâmbulo de Tabs do teclado agora assere o
+    foco após cada Tab, não só no fim.
+15. **Teste herdado da fase 3 ajustado, não deletado**: `catalog.spec.ts`
+    ("MobileSearchBar submit from /nft/$nftId...") assumia que a busca
+    inline funcionava em qualquer rota fora do catálogo — `/nft/*` era a
+    única rota assim e a decisão 6 desta fase a removeu de lá. Reescrito
+    para a asserção negativa (a barra realmente não existe nessa rota);
+    `e2e/nft-detail.spec.ts` cobre o resto do critério 16.
+16. **Dívidas 6 e 9 da fase 2/3 não são trabalho desta fase** — já estavam
+    fechadas (entradas fantasma corrigidas pelo usuário); esta fase só
+    cobre o comportamento com teste (critério 15: "Mercado" ativo em
+    `/nft/*`, header sem régua nessa rota).
