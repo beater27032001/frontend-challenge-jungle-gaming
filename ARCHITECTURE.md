@@ -193,14 +193,23 @@ Achados `[minor]` da revisão da fase 3 mais o que sobrou da fase 2, num só lug
 
 **Herdadas da fase 2, ainda abertas:**
 
-6. `src/components/layout/header.tsx` — `pathname.startsWith('/')` marca
-   "Início" ativo em qualquer rota, inclusive 404. A tabela de prefixos cresce
-   na fase 4 (detalhe do NFT), então o conserto vence aqui.
+6. ~~`src/components/layout/header.tsx` — `pathname.startsWith('/')`~~
+   **JÁ FECHADA na fase 3.** `header.tsx:17-21` usa igualdade exata para `/` e
+   prefixo `/nft` para "Mercado". Entrada obsoleta: montei esta lista a partir
+   dos achados do Reviewer sem conferir se a fase 3 já os tinha resolvido. A
+   fase 4 só cobre o comportamento com teste.
 7. `src/index.css` — sombreamento de `--color-foreground` sobre o alias
    `--foreground`, mesma armadilha da colisão `--secondary` já corrigida.
 8. `src/components/ui/card.tsx` — `rounded-xl` (10px) fora do raio de sistema.
-9. `src/components/ui/slider.tsx` — thumb `bg-white`, fora da paleta.
+9. ~~`src/components/ui/slider.tsx` — thumb `bg-white`~~ **JÁ FECHADA na
+   fase 3.** O thumb usa `primary` e o trilho inativo `border-soft`. Mesma
+   origem do erro do item 6.
 10. `src/components/ui/badge.tsx` — variantes não usadas; podar ou justificar.
+
+**Nota sobre esta lista:** duas entradas (6 e 9) nasceram obsoletas porque eu
+as copiei dos achados do Reviewer sem verificar o código. O Planner da fase 4
+pegou conferindo. Ao montar a lista da fase 5, **verificar cada item contra a
+árvore antes de registrar** — dívida fantasma custa tempo de quem for quitá-la.
 
 **Observação de design, não dívida técnica:**
 
