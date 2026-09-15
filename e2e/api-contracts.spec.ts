@@ -2,6 +2,8 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { expect, test, type Page } from '@playwright/test'
+import Big from 'big.js'
+import { ANA, apiFetch, addToCart, boot, bootReset, BRUNO, clearCart, login, logout, reset, setScenario } from './helpers'
 
 /**
  * Phase 1 contract tests: exercise the MSW mock API (types, db, scenarios)
@@ -9,86 +11,12 @@ import { expect, test, type Page } from '@playwright/test'
  * touches the service worker, so every assertion goes through
  * `page.evaluate(fetch)`. `GET /api/health` is the only route reachable
  * outside a booted app; everything else requires `boot()` first.
+ *
+ * Shared boot/fetch/auth helpers live in `./helpers` (fase 2 consolidation,
+ * spec §6) — this file also absorbs the 4 `describe` blocks that used to
+ * live in the now-deleted `nft-catalog-session-integrity.spec.ts` (see the
+ * "Long-session coherence…" section below).
  */
-
-const ANA = { email: 'ana@greenmint.dev', password: 'GreenMint#1' }
-const BRUNO = { email: 'bruno@greenmint.dev', password: 'GreenMint#2' }
-
-type ApiResult<T = any> = { status: number; body: T }
-
-async function boot(page: Page, query = ''): Promise<void> {
-  await page.goto(`/${query}`)
-  await expect(page.getByRole('status')).toHaveText(/MSW respondeu/i)
-}
-
-/**
- * Resets the mock db via the one-shot `?mock-reset=1` boot param.
- * `installMockControls()` strips the param from the URL after consuming it,
- * so a later `page.reload()` doesn't repeat the reset.
- */
-async function bootReset(page: Page): Promise<void> {
-  await boot(page, '?mock-reset=1')
-}
-
-async function apiFetch<T = any>(
-  page: Page,
-  url: string,
-  init?: { method?: string; body?: unknown; headers?: Record<string, string> },
-): Promise<ApiResult<T>> {
-  return page.evaluate(async ({ url, init }) => {
-    const res = await fetch(url, {
-      method: init?.method ?? 'GET',
-      headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
-      body: init?.body !== undefined ? JSON.stringify(init.body) : undefined,
-    })
-    let body: unknown = null
-    try {
-      body = await res.json()
-    } catch {
-      // no/invalid JSON body (e.g. 204)
-    }
-    return { status: res.status, body }
-  }, { url, init })
-}
-
-async function login(page: Page, creds: { email: string; password: string }): Promise<void> {
-  const res = await apiFetch(page, '/api/auth/login', { method: 'POST', body: creds })
-  expect(res.status, JSON.stringify(res.body)).toBe(200)
-}
-
-async function logout(page: Page): Promise<void> {
-  await apiFetch(page, '/api/auth/logout', { method: 'POST' })
-}
-
-async function setScenario(page: Page, name: string): Promise<void> {
-  await page.evaluate((name) => window.__mocks!.setScenario(name as never), name)
-}
-
-async function reset(page: Page): Promise<void> {
-  await page.evaluate(() => window.__mocks!.reset())
-}
-
-async function addToCart(
-  page: Page,
-  nftId: string,
-  editionId: string,
-  quantity: number,
-): Promise<ApiResult> {
-  return apiFetch(page, '/api/cart/items', {
-    method: 'POST',
-    body: { nftId, editionId, quantity },
-  })
-}
-
-/** Empties the current owner's cart — used so a target item lands as the
- * quote's first line, which is what the price-changed/sold-out scenario
- * hooks act on. */
-async function clearCart(page: Page): Promise<void> {
-  const cart = await apiFetch(page, '/api/cart')
-  for (const item of cart.body.items) {
-    await apiFetch(page, `/api/cart/items/${item.id}`, { method: 'DELETE' })
-  }
-}
 
 test.describe('NFT catalogue', () => {
   test('pagination: default page 1 of 12, last page, and past-the-end page', async ({ page }) => {
@@ -128,19 +56,47 @@ test.describe('NFT catalogue', () => {
     const [first, second] = await Promise.all([apiFetch(page, url), apiFetch(page, url)])
 
     expect(second.body).toEqual(first.body)
-    expect(first.body.total).toBe(12)
+    // 9 categories x 4 rarities, gcd(9,4)=1: art+epic lands on exactly two
+    // NFTs, i=0 (nft-001) and i=36 (nft-037), both priced '0.008' (i%12=0
+    // on the price table for both).
+    expect(first.body.total).toBe(2)
     for (const item of first.body.items) {
       expect(item.category).toBe('art')
       expect(item.rarity).toBe('epic')
     }
-    const prices = first.body.items.map((i: { priceEth: string }) => Number(i.priceEth))
-    expect(prices).toEqual([...prices].sort((a, b) => a - b))
+    expect(first.body.items.map((i: { id: string }) => i.id).sort()).toEqual(['nft-001', 'nft-037'])
+    for (const item of first.body.items) expect(item.priceEth).toBe('0.008')
 
-    // A mismatched (impossible, per the fixture generator) category/rarity
-    // pair is also deterministic and simply empty — not an error.
-    const impossible = await apiFetch(page, '/api/nfts?category=art&rarity=rare')
-    expect(impossible.status).toBe(200)
-    expect(impossible.body.total).toBe(0)
+    // Pairwise price-asc check via big.js — never `Number()` on an
+    // *Eth-named field (static contract check below guards this repo-wide).
+    for (let i = 1; i < first.body.items.length; i++) {
+      const prev = first.body.items[i - 1].priceEth
+      const curr = first.body.items[i].priceEth
+      expect(new Big(curr).gte(prev), `item ${i} out of order vs item ${i - 1}`).toBe(true)
+    }
+
+    // With 9 categories and 4 rarities, gcd(9,4)=1: every category×rarity
+    // pair now exists — the "impossible pair" from the old 4-category
+    // fixtures doesn't exist anymore. art+rare has exactly one NFT.
+    const artRare = await apiFetch(page, '/api/nfts?category=art&rarity=rare')
+    expect(artRare.status).toBe(200)
+    expect(artRare.body.total).toBe(1)
+    expect(artRare.body.items[0].id).toBe('nft-028')
+  })
+
+  test('a new (fase 2) category value is a real filter; an unknown category value is rejected with 400', async ({
+    page,
+  }) => {
+    await boot(page, '?mock-reset=1')
+    // 9 categories over 48 NFTs (i % 9): the first 3 (art/photography/music)
+    // get 6 each, the remaining 6 (including generative) get 5 each.
+    const generative = await apiFetch(page, '/api/nfts?category=generative')
+    expect(generative.status).toBe(200)
+    expect(generative.body.total).toBe(5)
+
+    const bogus = await apiFetch(page, '/api/nfts?category=nunca-existiu')
+    expect(bogus.status).toBe(400)
+    expect(bogus.body.error.code).toBe('validation_error')
   })
 
   test('priceMin > priceMax returns an empty list, not an error', async ({ page }) => {
@@ -162,7 +118,7 @@ test.describe('NFT catalogue', () => {
     expect(zero.body.error.code).toBe('validation_error')
   })
 
-  test('detail: 404 for unknown id, 200 with editions/priceEth as string for a known id', async ({
+  test('detail: 404 for unknown id, 200 with editions/priceEth as string and local cycling webp images for a known id', async ({
     page,
   }) => {
     await boot(page, '?mock-reset=1')
@@ -174,6 +130,11 @@ test.describe('NFT catalogue', () => {
     expect(found.status).toBe(200)
     expect(found.body.editions.length).toBeGreaterThanOrEqual(1)
     expect(typeof found.body.priceEth).toBe('string')
+
+    // External placeholder-image debt paid off (spec §5): 4 local assets cycled by index.
+    expect(found.body.imageUrl).toBe('/nft/ape-01.webp')
+    expect(found.body.images).toEqual(['/nft/ape-01.webp', '/nft/ape-02.webp', '/nft/ape-03.webp'])
+    expect(found.body.images[0]).toBe(found.body.imageUrl)
   })
 })
 
@@ -444,6 +405,49 @@ test.describe('Quote', () => {
     })
     expect(order.status).toBe(201)
     expect(order.body.items.some((i: { nftId: string }) => i.nftId === line.nftId)).toBe(true)
+  })
+
+  test('network: solana is accepted and priced with NETWORK_FEES.solana; wallet and order schemas accept it too', async ({
+    page,
+  }) => {
+    await bootReset(page)
+    await login(page, ANA)
+
+    // Ana's fixture cart already has lines; quoting under solana swaps in the
+    // solana fee instead of the ethereum default (spec §3: 3 networks now).
+    const quote = await apiFetch(page, '/api/quote', { method: 'POST', body: { network: 'solana' } })
+    expect(quote.status).toBe(200)
+    expect(quote.body.networkFeeEth).toBe('0.0001')
+    expect(quote.body.network).toBe('solana')
+
+    // Wallet schema: 'solana' is a valid enum value, not a validation_error.
+    // No solana wallet ships in the fixtures on purpose (out of scope, spec
+    // §3) — this one is created fresh, just for this test.
+    const wallet = await apiFetch(page, '/api/wallets', {
+      method: 'POST',
+      body: {
+        label: 'Carteira Solana',
+        address: '0x222222222222222222222222222222222222222b',
+        network: 'solana',
+        role: 'secondary',
+      },
+    })
+    expect(wallet.status).toBe(201)
+    expect(wallet.body.network).toBe('solana')
+
+    // Order schema: 'solana' goes all the way through to a confirmed order.
+    const order = await apiFetch(page, '/api/orders', {
+      method: 'POST',
+      headers: { 'Idempotency-Key': 'solana-order-1' },
+      body: {
+        quoteId: quote.body.id,
+        walletId: wallet.body.id,
+        network: 'solana',
+        payer: { name: 'Ana Volt', email: ANA.email },
+      },
+    })
+    expect(order.status, JSON.stringify(order.body)).toBe(201)
+    expect(order.body.network).toBe('solana')
   })
 })
 
@@ -893,7 +897,7 @@ test.describe('Fix Plan (iteration 2): NftSummary derived fields stay coherent',
     return item
   }
 
-  test('seed remains unchanged: fresh reset top-level fields match the known fixture values, SEED_VERSION stays 1', async ({
+  test('seed remains unchanged: fresh reset top-level fields match the known fixture values, SEED_VERSION stays 2', async ({
     page,
   }) => {
     await bootReset(page)
@@ -905,7 +909,9 @@ test.describe('Fix Plan (iteration 2): NftSummary derived fields stay coherent',
 
     const dump = await page.evaluate(() => localStorage.getItem('greenmint:db:v1'))
     const dbDump = JSON.parse(dump!)
-    expect(dbDump.seedVersion).toBe(1)
+    // Fase 2 (spec §3): fixtures reconciled with the 9-category/3-network
+    // design system, SEED_VERSION bumped from 1 to 2.
+    expect(dbDump.seedVersion).toBe(2)
   })
 
   test('sold-out: top-level `available` (not just editions[0]) drops to 0 on both detail and list, and never contradicts editions', async ({
@@ -1122,6 +1128,279 @@ test.describe('Fix Plan (iteration 2): NftSummary derived fields stay coherent',
   })
 })
 
+/**
+ * Consolidated from `e2e/nft-catalog-session-integrity.spec.ts` (deleted,
+ * fase 2 E2E consolidation, spec §6): long-session/localStorage/reset/
+ * pagination coherence checks that don't fit any single mutation kind above.
+ * `purchase` and `assertCoherent` stay local to this file (module scope, not
+ * exported from `./helpers`) — they're specific to this coherence-testing
+ * section, shared across its 4 `describe` blocks below.
+ */
+
+/** Adds a single NFT/edition to a clean cart, quotes it, and submits an order. */
+async function purchase(
+  page: Page,
+  nftId: string,
+  editionId: string,
+  quantity: number,
+  idempotencyKey: string,
+) {
+  await clearCart(page)
+  const add = await apiFetch(page, '/api/cart/items', {
+    method: 'POST',
+    body: { nftId, editionId, quantity },
+  })
+  expect(add.status, JSON.stringify(add.body)).toBe(200)
+  const quote = await apiFetch(page, '/api/quote', { method: 'POST', body: {} })
+  expect(quote.status, JSON.stringify(quote.body)).toBe(200)
+  const wallets = await apiFetch(page, '/api/wallets')
+  return apiFetch(page, '/api/orders', {
+    method: 'POST',
+    headers: { 'Idempotency-Key': idempotencyKey },
+    body: {
+      quoteId: quote.body.id,
+      walletId: wallets.body[0].id,
+      network: 'ethereum',
+      payer: { name: 'Ana Volt', email: ANA.email },
+    },
+  })
+}
+
+/** Fetches detail + the matching list summary and asserts they never contradict. */
+async function assertCoherent(page: Page, nftId: string) {
+  const detail = await apiFetch(page, `/api/nfts/${nftId}`)
+  expect(detail.status, `detail fetch for ${nftId}`).toBe(200)
+  const editionsSum = detail.body.editions.reduce((sum: number, e: { available: number }) => sum + e.available, 0)
+  expect(detail.body.available, `${nftId} detail top-level available vs its own editions sum`).toBe(editionsSum)
+
+  const list = await apiFetch(page, '/api/nfts?perPage=48')
+  const summary = list.body.items.find((i: { id: string }) => i.id === nftId)
+  expect(summary, `${nftId} missing from catalogue`).toBeTruthy()
+
+  expect(summary.available, `${nftId} list summary vs detail: available`).toBe(detail.body.available)
+  expect(summary.priceEth, `${nftId} list summary vs detail: priceEth`).toBe(detail.body.priceEth)
+  expect(summary.version, `${nftId} list summary vs detail: version`).toBe(detail.body.version)
+
+  return { available: detail.body.available, priceEth: detail.body.priceEth, version: detail.body.version }
+}
+
+test.describe('Long-session coherence across multiple NFTs, mutations and reloads', () => {
+  test('purchases + sold-out + price-changed, interleaved with reloads, never leave any touched NFT self-contradicting', async ({
+    page,
+  }) => {
+    await boot(page, '?mock-reset=1')
+    await login(page, ANA)
+
+    // Step 1: plain purchase on nft-005 (single edition, untouched by fixtures).
+    const buy1 = await purchase(page, 'nft-005', 'nft-005-e1', 2, 'session-buy-005-a')
+    expect(buy1.status, JSON.stringify(buy1.body)).toBe(201)
+    await page.reload()
+    await expect(page.getByRole('status')).toHaveText(/MSW respondeu/i)
+    const s1 = await assertCoherent(page, 'nft-005')
+    expect(s1.available).toBe(8) // 10 - 2
+
+    // Step 2: sold-out scenario on a different NFT (nft-006).
+    await login(page, ANA) // reload dropped in-page JS state, but session cookie survives; re-login is a no-op 200
+    await setScenario(page, 'sold-out')
+    const soldOut = await purchase(page, 'nft-006', 'nft-006-e1', 1, 'session-soldout-006')
+    expect(soldOut.status).toBe(409)
+    await setScenario(page, 'default')
+    await page.reload()
+    await expect(page.getByRole('status')).toHaveText(/MSW respondeu/i)
+    // Both NFTs touched so far must independently still be coherent.
+    const s2a = await assertCoherent(page, 'nft-005')
+    expect(s2a.available).toBe(8) // untouched by step 2, must not have drifted
+    const s2b = await assertCoherent(page, 'nft-006')
+    expect(s2b.available).toBe(0)
+
+    // Step 3: price-changed scenario on yet another NFT (nft-009).
+    await login(page, ANA)
+    await setScenario(page, 'price-changed')
+    const priceChanged = await purchase(page, 'nft-009', 'nft-009-e1', 1, 'session-pricechanged-009')
+    expect(priceChanged.status).toBe(409)
+    await setScenario(page, 'default')
+    // No reload this time: check the in-memory-then-persisted state right away too.
+    const s3a = await assertCoherent(page, 'nft-005')
+    const s3b = await assertCoherent(page, 'nft-006')
+    const s3c = await assertCoherent(page, 'nft-009')
+    expect(s3a.available).toBe(8)
+    expect(s3b.available).toBe(0)
+    expect(s3c.priceEth).toBe('0.825') // 0.75 * 1.1 via roundEth
+
+    // Step 4: a second, compounding purchase on the NFT touched in step 1.
+    await login(page, ANA)
+    const buy2 = await purchase(page, 'nft-005', 'nft-005-e1', 3, 'session-buy-005-b')
+    expect(buy2.status, JSON.stringify(buy2.body)).toBe(201)
+    await page.reload()
+    await expect(page.getByRole('status')).toHaveText(/MSW respondeu/i)
+
+    // Final checkpoint: all three NFTs touched across the whole session are
+    // still each internally coherent AND correctly reflect every mutation
+    // that was applied to them specifically (no cross-talk between refreshes).
+    const final5 = await assertCoherent(page, 'nft-005')
+    const final6 = await assertCoherent(page, 'nft-006')
+    const final9 = await assertCoherent(page, 'nft-009')
+    expect(final5.available).toBe(5) // 10 - 2 - 3
+    expect(final6.available).toBe(0) // still sold out
+    expect(final9.priceEth).toBe('0.825') // still the raised price, no further change applied
+    expect(final9.available).toBe(10) // sold-out/price-changed hooks mutate but the order itself was rejected (409)
+  })
+})
+
+test.describe('Persistence of derived fields in localStorage', () => {
+  test('the raw persisted db blob (not just the live API response) carries the recomputed top-level fields after a mutation and a reload', async ({
+    page,
+  }) => {
+    await boot(page, '?mock-reset=1')
+    await login(page, ANA)
+
+    const buy = await purchase(page, 'nft-019', 'nft-019-e1', 4, 'persist-check-019')
+    expect(buy.status, JSON.stringify(buy.body)).toBe(201)
+
+    // Inspect the actual localStorage JSON directly, bypassing the API, to
+    // rule out a regression where refreshNftDerived() runs correctly at
+    // mutation time but the write to storage races or is skipped.
+    const rawBefore = await page.evaluate(() => localStorage.getItem('greenmint:db:v1'))
+    const dbBefore = JSON.parse(rawBefore!)
+    const nftBefore = dbBefore.nfts.find((n: { id: string }) => n.id === 'nft-019')
+    expect(nftBefore.available).toBe(6) // 10 - 4, persisted top-level field
+    expect(nftBefore.available).toBe(
+      nftBefore.editions.reduce((sum: number, e: { available: number }) => sum + e.available, 0),
+    )
+
+    // Reload: hydrateDb() re-parses this exact blob. If the recompute only
+    // ever happened transiently in-memory, this would resurface the seed's
+    // stale `available: 10` after rehydration.
+    await page.reload()
+    await expect(page.getByRole('status')).toHaveText(/MSW respondeu/i)
+    const detail = await apiFetch(page, '/api/nfts/nft-019')
+    expect(detail.body.available).toBe(6)
+
+    // And the blob written back out after rehydration+persist must still
+    // agree — no drift introduced by a rehydrate/persist round-trip.
+    const rawAfter = await page.evaluate(() => localStorage.getItem('greenmint:db:v1'))
+    const dbAfter = JSON.parse(rawAfter!)
+    const nftAfter = dbAfter.nfts.find((n: { id: string }) => n.id === 'nft-019')
+    expect(nftAfter.available).toBe(6)
+    expect(nftAfter.priceEth).toBe(nftBefore.priceEth)
+  })
+})
+
+test.describe('Reset after a heavy multi-mutation session', () => {
+  test('?mock-reset=1 restores the exact seed values for every previously-touched NFT, not just an untouched one', async ({
+    page,
+  }) => {
+    await boot(page, '?mock-reset=1')
+    await login(page, ANA)
+
+    const buy = await purchase(page, 'nft-025', 'nft-025-e1', 5, 'reset-check-buy-025')
+    expect(buy.status).toBe(201)
+
+    await setScenario(page, 'sold-out')
+    const soldOut = await purchase(page, 'nft-030', 'nft-030-e1', 1, 'reset-check-soldout-030')
+    expect(soldOut.status).toBe(409)
+
+    await setScenario(page, 'price-changed')
+    const priceChanged = await purchase(page, 'nft-006', 'nft-006-e1', 1, 'reset-check-pricechanged-006')
+    expect(priceChanged.status).toBe(409)
+    await setScenario(page, 'default')
+
+    // Sanity: the session really did mutate all three before resetting.
+    const beforeReset025 = await apiFetch(page, '/api/nfts/nft-025')
+    const beforeReset030 = await apiFetch(page, '/api/nfts/nft-030')
+    const beforeReset006 = await apiFetch(page, '/api/nfts/nft-006')
+    expect(beforeReset025.body.available).toBe(5)
+    expect(beforeReset030.body.available).toBe(0)
+    expect(beforeReset006.body.priceEth).toBe('0.132')
+
+    await page.goto('/?mock-reset=1')
+    await expect(page.getByRole('status')).toHaveText(/MSW respondeu/i)
+
+    const after025 = await apiFetch(page, '/api/nfts/nft-025')
+    const after030 = await apiFetch(page, '/api/nfts/nft-030')
+    const after006 = await apiFetch(page, '/api/nfts/nft-006')
+    expect(after025.body).toMatchObject({ available: 10, priceEth: '0.008', version: 1 })
+    expect(after030.body).toMatchObject({ available: 10, priceEth: '0.12', version: 1 })
+    expect(after006.body).toMatchObject({ available: 10, priceEth: '0.12', version: 1 })
+
+    // The summary side of the catalogue agrees too, not just the detail route.
+    const list = await apiFetch(page, '/api/nfts?perPage=48')
+    for (const [id, expected] of [
+      ['nft-025', { available: 10, priceEth: '0.008' }],
+      ['nft-030', { available: 10, priceEth: '0.12' }],
+      ['nft-006', { available: 10, priceEth: '0.12' }],
+    ] as const) {
+      const summary = list.body.items.find((i: { id: string }) => i.id === id)
+      expect(summary, `${id} in reset catalogue`).toMatchObject(expected)
+    }
+  })
+})
+
+test.describe('Scenario mutations keep the paginated catalogue and price filter globally coherent', () => {
+  test('after price-changed and sold-out, the full price-asc listing is still fully sorted with no duplicate/missing NFT and pagination totals are unaffected', async ({
+    page,
+  }) => {
+    await boot(page, '?mock-reset=1')
+    await login(page, ANA)
+
+    const baseline = await apiFetch(page, '/api/nfts?sort=price-asc&perPage=48')
+    expect(baseline.body.total).toBe(48)
+    expect(baseline.body.totalPages).toBe(1) // 48 items / perPage 48
+    const baselineIds = new Set(baseline.body.items.map((i: { id: string }) => i.id))
+    expect(baselineIds.size).toBe(48)
+
+    // price-changed on nft-006 ('0.12' -> '0.132') moves it within the
+    // price-asc ordering (it now sits strictly above every remaining
+    // '0.12'-priced NFT it used to tie with).
+    await setScenario(page, 'price-changed')
+    const pc = await purchase(page, 'nft-006', 'nft-006-e1', 1, 'catalog-coherence-pricechanged')
+    expect(pc.status).toBe(409)
+
+    // sold-out on nft-030 doesn't change its price, only its availability —
+    // it must not disappear from the catalogue or change page counts.
+    await setScenario(page, 'sold-out')
+    const so = await purchase(page, 'nft-030', 'nft-030-e1', 1, 'catalog-coherence-soldout')
+    expect(so.status).toBe(409)
+    await setScenario(page, 'default')
+
+    const after = await apiFetch(page, '/api/nfts?sort=price-asc&perPage=48')
+    expect(after.body.total).toBe(48) // sold-out item still counted
+    expect(after.body.totalPages).toBe(1) // 48 items / perPage 48, unaffected by the mutations
+    const afterIds = after.body.items.map((i: { id: string }) => i.id)
+    expect(new Set(afterIds).size).toBe(48) // no duplicate
+    expect(new Set(afterIds)).toEqual(baselineIds) // no missing/extra item
+
+    // The whole list is genuinely sorted by the freshly-recomputed price,
+    // not the stale seed value — checked pairwise across all 48 items via
+    // big.js (never `Number()` on an *Eth-named field).
+    for (let i = 1; i < after.body.items.length; i++) {
+      const prev = after.body.items[i - 1].priceEth
+      const curr = after.body.items[i].priceEth
+      expect(new Big(curr).gte(prev), `item ${i} out of order vs item ${i - 1}`).toBe(true)
+    }
+    const mutated = after.body.items.find((i: { id: string }) => i.id === 'nft-006')
+    expect(mutated.priceEth).toBe('0.132')
+
+    // Per-page pagination is stable too: fetching all 4 pages individually
+    // reconstructs exactly the same 48 ids as the single perPage=48 call.
+    const paged: string[] = []
+    for (let p = 1; p <= 4; p++) {
+      const page_ = await apiFetch(page, `/api/nfts?sort=price-asc&page=${p}&perPage=12`)
+      expect(page_.body.items).toHaveLength(12)
+      paged.push(...page_.body.items.map((i: { id: string }) => i.id))
+    }
+    expect(paged).toEqual(afterIds)
+
+    // Combined filter (category + priceMin) reflects the updated price too:
+    // nft-006 is category cycle index i=5 -> CATEGORIES[5 % 9] = 'generative'
+    // (fase 2: 9-category cycle, was 'gaming' under the old 4-category one).
+    const filteredBefore = await apiFetch(page, '/api/nfts?category=generative&priceMax=0.13&perPage=48')
+    expect(filteredBefore.body.items.some((i: { id: string }) => i.id === 'nft-006')).toBe(false) // 0.132 > 0.13
+    const filteredWide = await apiFetch(page, '/api/nfts?category=generative&priceMax=0.14&perPage=48')
+    expect(filteredWide.body.items.some((i: { id: string }) => i.id === 'nft-006')).toBe(true)
+  })
+})
+
 test.describe('Wallets', () => {
   test('promoting a second wallet to primary demotes the existing primary atomically', async ({
     page,
@@ -1262,9 +1541,11 @@ test.describe('Static contract checks (source, not runtime)', () => {
     expect(content).toContain('axios.create')
   })
 
-  test('no fictitious/mocked data lives outside src/mocks/', () => {
+  test('no fictitious/mocked data lives outside src/mocks/ — including src/mocks/ itself now (fase 2, criterion 6)', () => {
+    // Fase 1 skipped src/mocks/ here because fixtures still used an external
+    // placeholder-image service. That debt is paid off (spec §5: local
+    // /nft/*.webp assets) — src/mocks/ is no longer exempt from this check.
     for (const file of walk(srcDir)) {
-      if (file.includes(`${path.sep}mocks${path.sep}`)) continue
       const content = fs.readFileSync(file, 'utf8')
       expect(content, file).not.toContain('picsum.photos')
     }
