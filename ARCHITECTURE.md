@@ -403,6 +403,259 @@ por ele mesmo
     não é.
 
 
+## Fase 5 — Conta e sessão
+
+**Nota de processo**: a primeira passada desta fase foi escrita contra uma
+extração incompleta do Figma (`specs/05-auth.md` só tinha a seção 1–6, e as
+"Open Questions" do spec do Coder derivaram cadastro/mobile por presunção sob
+prazo). No meio da implementação, `specs/05-auth.md` ganhou as seções 7–9 com
+o cadastro desktop e os dois frames mobile REALMENTE extraídos — e a extração
+contradiz a presunção em dois pontos estruturais: **mobile não é o modal
+encolhido, é rota própria de tela cheia**, e o modal desktop tem outro raio
+(8, não 5) e outro subtítulo por aba. A implementação foi refeita em cima da
+extração real; as decisões abaixo já refletem essa versão final, não a
+presunção original.
+
+1. **`/login` e `/cadastro` são rotas reais, não search param.** O Figma
+   mobile prova isso: login/cadastro no mobile são páginas cheias com o
+   próprio logo/título, não um modal encolhido (specs/05-auth.md §8, item que
+   contradiz a seção 1 do próprio spec). Uma rota por tela, duas composições
+   por breakpoint (`hidden lg:*`/`lg:hidden`, mesmo padrão de
+   `nft.$nftId.tsx`) — não dois mecanismos. `redirect` (query string,
+   validada com `.catch(undefined)` se não começar com `/`) carrega a página
+   de origem: header, coração de favorito e o interceptor de sessão expirada
+   todos passam o `pathname` atual: é o "retorno ao fluxo anterior" (§3) via
+   navegação real, em vez de um param que some.
+
+2. **Compromisso registrado (bloco grande demais para a versão "modal
+   literalmente sobre o catálogo montado"): o desktop não mantém a página de
+   fundo montada por trás do Dialog.** O Figma pede o catálogo visível atrás
+   do overlay; construir isso de verdade exigiria rotas paralelas/
+   intercepting routes (Next.js tem; TanStack Router não tem esse mecanismo
+   nativo) — fora do orçamento desta fase sob prazo. A composição desktop
+   usa o `Dialog` do Radix (focus trap/Esc de graça) centrado num overlay
+   escuro; ao fechar ou concluir o form, navega para `redirect` (a página
+   real de origem) via navegação de verdade, o que entrega o "retorno ao
+   fluxo anterior" funcionalmente (a URL/estado da página de origem volta
+   exatos) sem o efeito visual de camadas. Header/Footer continuam
+   renderizando por trás (o `__root__` não os esconde nesta rota), o que
+   aproxima visualmente sem ser literal.
+
+3. **Dialog só monta em `>=lg` via JS (`useMediaQuery`), não só CSS.** Radix
+   Portal escapa da hierarquia do DOM: um `hidden lg:block` no wrapper NÃO
+   escondia o conteúdo do Dialog em telas menores (o portal insere direto em
+   `document.body`), e mesmo escondendo por CSS puro (`className` no próprio
+   painel) o *overlay* e o *focus trap* continuavam ativos, roubando o foco
+   da tela mobile por trás. `src/lib/use-media-query.ts` (hook novo,
+   `window.matchMedia`) só monta `<Dialog>` quando `min-width: 1024px` bate;
+   abaixo disso `LoginDesktop`/`RegisterDesktop` retornam `null` e
+   `LoginMobile`/`RegisterMobile` (página comum, sem Dialog) são o que
+   existe no DOM.
+
+4. **Confirmar senha é campo client-only.** O Figma pede "Confirmar senha"
+   nos dois formulários de cadastro (specs/05-auth.md §7.1/§8.4) mas
+   `registerSchema` (contrato da API) não tem esse campo. `registerFormSchema`
+   (`auth-schemas.ts`) estende `registerSchema` com `confirmPassword` + um
+   `refine` (senhas iguais) só para validação local; `register.mutate` recebe
+   só `{ name, email, password }` — o campo nunca sai do browser.
+
+5. **Toggle de olho nos dois campos de senha, nas duas superfícies.** O
+   Figma é assimétrico (só "Senha" tem o olho no modal desktop; os dois
+   campos têm no mobile — specs/05-auth.md §7.1 vs §8.4, e o próprio spec
+   recomenda unificar). Resolvido a favor de dar o toggle a todo campo de
+   senha: esconder "Confirmar senha" sem poder revelá-lo é hostil, e o
+   Figma mobile já faz assim.
+
+6. **Dois erros do Figma corrigidos, não copiados** (specs/05-auth.md §8.4,
+   item 9 de "Consequências"): o placeholder do primeiro campo do cadastro
+   mobile estava em inglês ("User Name") e centralizado (`x 115.5` contra
+   `x 16` dos outros três) — usa "Nome de usuário" com o mesmo `pl-16` dos
+   demais, igual ao modal desktop já fazia.
+
+7. **A faixa de 10px do rodapé existe só no login desktop.** O node do
+   cadastro desktop (`9:1230`, `y 646`) está fora dos 600px do modal — sobra
+   de composição, não um elemento intencional (specs/05-auth.md §7.4).
+   Incluída só no login (onde `top: 590` fecha exatamente nos 600px);
+   incluir também no cadastro criaria uma assimetria que o próprio Figma não
+   desenhou.
+
+8. **Dois conjuntos de primitivos de input, não um** (specs/05-auth.md §9):
+   desktop `h-40`/raio `5`/`px-16 py-12`; mobile `h-50`/raio `10`/`pl-16`. O
+   raio do **shell** do modal é `8` (não 5 — a presunção original errou essa
+   medida, só tinha certeza do raio do input). CTA desktop `h-45`/raio `5`;
+   CTA mobile `358×60`/raio `10` — **raio 10 e cor plana**, nunca confundir
+   com o CTA-pílula (raio 40 + gradiente) do carrinho/pagamento (specs
+   06/07), são componentes de propósito diferente.
+
+9. **Cópia difere por breakpoint no cadastro**: desktop chama o CTA
+   "Criar conta" (specs/05-auth.md §7.2); mobile chama "Criar perfil" e o
+   título é "Criar perfil de colecionador" (§8.3/§8.5) — não normalizar para
+   o mesmo texto nas duas composições, é o que o Figma mostra.
+
+10. **`--text-title-20-medium` não empacota o peso 500.** Nenhuma escala
+    existente empacota `font-weight` (só tamanho, e às vezes `line-height`
+    via companion `--line-height`) — o peso sempre foi aplicado por
+    `font-medium`/`font-bold` no call-site. O token novo carrega tamanho
+    (20px) + `line-height` (16px); `font-medium` vem da classe Tailwind no
+    call-site (`auth-desktop.tsx`). Note que o mobile usa 20px **bold** no
+    título (§8.3) — token diferente, não reaproveitar este aqui.
+
+11. **`getRouteApi('__root__')` em vez de `useNavigate({ from: '__root__' })`.**
+    TanStack Router recusa `'__root__'` como `FromPathOption` de
+    `useNavigate` (erro de tipo) — `getRouteApi('__root__').useNavigate()`,
+    chamado fora do arquivo da rota (header, card mobile), é o padrão oficial
+    da lib para o mesmo resultado tipado quando o componente está montado em
+    toda rota. Em `main.tsx`, fora de qualquer componente React, não há hook
+    disponível: `router.navigate({ to: '/login', search: { redirect } })`
+    com `to` explícito.
+
+12. **Honestidade sem backend (§3, mesma regra da newsletter/fase 2):**
+    Google, Facebook (ícones genéricos `Globe`/`ThumbsUp` do lucide, mesmo
+    precedente dos ícones sociais do footer — a marca não tem glifo próprio
+    na lib) e "Esqueceu a senha?" são `disabled`, com `title` explicando a
+    ausência de backend. Nenhum dos três chama `/auth/*` nem finge sucesso.
+
+13. **Logout não existe no mobile nesta fase (dívida da fase 8).** Sem
+    header mobile e sem tela de Perfil até a fase 8, não há entrada de
+    logout em `< lg`. Um usuário que logar no mobile permanece logado até
+    limpar cookies manualmente ou voltar ao desktop — aceito, registrado
+    como dívida (mesma decisão do plano, "Out of scope" do spec 05).
+
+14. **Guard de rota (`beforeLoad`) não nasce nesta fase.** Não existe rota
+    privada ainda — checkout (7) e perfil/carteiras (8) não têm rota, e
+    favoritos não têm página própria no Figma. O que a fase 5 protege,
+    protege na interação (coração/Favoritar → navega para `/login`). O guard
+    nasce com a primeira rota privada, ~5 linhas usando o mesmo `redirect`.
+
+15. **Logout faz `queryClient.clear()` + `window.location.reload()`, não só
+    `clear()`.** Investigação ao vivo (Playwright + `window.__debug*` ad-hoc)
+    achou um caso real de vazamento pós-logout: o coração do card de
+    catálogo (cada card com seu próprio `useSession()`) continuava mostrando
+    o favorito de Ana depois de "Sair", enquanto o Header (também
+    `useSession()`, um único consumidor) atualizava corretamente para
+    "Entrar" no mesmo instante. Instrumentado (push de `scope`/`session.data`
+    a cada render): o Header recebeu a notificação de `clear()`
+    (5 renders, o último com `hasData:false`); o `HomePage` da rota `/`
+    (dono da query de favoritos/lista do card) **parou de renderizar
+    completamente** depois do clique em "Sair" — 4 renders, todos ainda
+    com `scope:'u-ana'`, nenhum depois. Confirmei que não é timing (esperei
+    a resposta do `PUT /favorites` assentar antes do logout) nem cookie
+    (`fetch` manual pós-logout confirma 401 correto). Não achei a causa raiz
+    de por que dois consumidores da MESMA query React Query reagem diferente
+    a um `clear()` — sob prazo, a correção mais simples e a que o §11
+    exige (eliminatório) é forçar um reload completo: garante estado
+    zerado para QUALQUER componente, não depende de nenhum observador
+    específico reagir corretamente. Login/registro continuam client-side
+    (sem reload) porque ali `queryClient.setQueryData(sessionKey, session)`
+    já prova, testado, que todo consumidor assenta. **Dívida para quem
+    revisitar**: reproduzir isolado (sem Playwright) e abrir uma issue no
+    TanStack Query se for bug da lib, ou achar o componente/memo que está
+    engolindo a notificação se for erro nosso.
+16. **"Limpar subscriptions" no logout está vazio até o Socket.IO nascer**
+    (fase 6/7). `queryClient.clear()` já cobre 100% do cache (privado e
+    público — é a garantia de zero vazamento entre usuários, §11); quando o
+    socket nascer, o `disconnect()` entra na mesma rotina de higiene
+    (`onSuccess` de `useLogin`/`useRegister`/`useLogout`), não em um lugar
+    novo.
+
+17. **Debounce do interceptor de `session_expired` é por tempo (300ms), não
+    por promise.** Várias queries em voo resolvem em tasks separadas, não no
+    mesmo microtask — um `queueMicrotask` resetaria a flag antes da segunda
+    resposta chegar e disparar dois toasts/duas navegações. 300ms cobre a
+    rajada real (queries lançadas juntas no boot ou ao trocar de tela) sem
+    represar um segundo evento genuíno depois de relogar.
+
+
+## Fase 6 — Carrinho
+
+Decisões tomadas onde o Figma não desenha. Todas foram levantadas pelo agente da
+fase e revisadas antes de entrar.
+
+37. **Total da linha é calculado, não lido da cotação.** `mulQty` (`big.js`) sobre
+    preço unitário × quantidade. A cotação também traz `lineTotalEth`, mas fica um
+    instante atrasada em relação ao carrinho logo após mexer no stepper, e o
+    número piscaria. Subtotal, desconto, taxa de rede e total **continuam vindo de
+    `POST /api/quote`**, como o CLAUDE.md exige — a exceção é só a linha.
+38. **Cupom recusado esconde desconto, taxa e total** (mostra `—`) e preserva o
+    subtotal, que vem de `GET /cart`. A alternativa — cotar sem cupom em paralelo —
+    custava mais código e escondia o erro.
+39. **Cupom é normalizado para maiúsculo** antes de enviar; o mock compara exato.
+40. **Remover cupom não existe no Figma.** Com cupom aplicado, o input fica
+    `readOnly` com o código e o botão passa a "Remover". Copy nossa.
+41. **Estado vazio não existe no Figma.** Card com "Seu carrinho está vazio" e link
+    "Continuar explorando".
+42. **Carrinho vazio remove a cotação do cache** em vez de invalidar: `POST /quote`
+    com carrinho vazio responde 400, e invalidar geraria um erro de console a cada
+    esvaziamento.
+43. **A lixeira colide com o botão `+` no próprio Figma** (`313..337` contra
+    `318..342`, verificado no arquivo, não erro de transcrição). Adotado: uma linha
+    à direita, stepper e depois lixeira, sem sobreposição.
+44. **Steppers do mobile são 24×24 no Figma**, abaixo do alvo de toque de 44px. A
+    área clicável foi ampliada sem mover o visual.
+45. **O stepper virou componente** (`src/components/quantity-stepper.tsx`),
+    extraído da Buy Bar mobile da fase 4, que o tinha embutido. Ganhou focus ring,
+    que a versão original não tinha.
+46. **Defeito da fase 4 corrigido na origem:** `useAddToCart` não sincronizava
+    cache nenhum, então o badge e a tela do carrinho só reagiriam depois do
+    `staleTime` de 30s.
+47. **O breadcrumb do desktop foi implementado como `<h1>` e corrigido depois.** O
+    bloco de 244×16 é `Início / Mercado / Carrinho` (`11:1309`). A causa foi o spec
+    dizer "breadcrumb ou título, não extraído em detalhe" — ambiguidade no spec
+    vira escolha errada no código. O `<h1>` permanece em `sr-only`, porque o
+    desktop não desenha título de página e leitor de tela precisa de um.
+
+## Dívidas para as fases 7 e 8
+
+Consolidado do que ficou aberto nas fases 5, 6 e 9. Quem pegar a fase 7 ou a 8
+deve ler esta lista antes de planejar.
+
+**Bloqueiam a fase 7 (checkout + confirmação)**
+
+1. **O CTA "Conectar e finalizar" do carrinho está `disabled`**, nas duas
+   composições, com comentário apontando para cá. Não existia rota de destino.
+2. **O passo 4 do cenário obrigatório do §7 não tem tela.** A fase 9 deixou pronta
+   a regra (`isQuoteStale`/`staleQuoteItems`, função pura) e o servidor já devolve
+   409 `quote_outdated`, mas não há botão "Confirmar" para bloquear. A fase 7 fecha
+   o cenário: preço muda → aviso → confirmar barrado → recotar.
+3. **`order.updated` não tem superfície visual** além do toast. Escreve em
+   `orderKey(scope, id)` (`src/features/checkout/queries.ts`, já criado pela fase
+   9); falta a tela que lê essa chave.
+4. **Não há seletor de rede.** A cotação usa `'ethereum'` fixo. A escolha de rede é
+   da fase 7 e já tem desenho (spec 07 §6.3 e §6.4).
+5. **Os quatro cenários de mock nunca exercitados** continuam sem consumidor:
+   `price-changed`, `sold-out`, `order-timeout`, `payment-declined`. O
+   `order-timeout` é o mais importante — a recuperação por idempotência precisa
+   devolver o **mesmo** pedido.
+
+**Bloqueiam a fase 8 (perfil + carteiras)**
+
+6. **Estender o mock**, decidido pelo usuário (spec 08 §2.4 e §3.5): `Profile`
+   ganha `username` (com 409 em colisão) e `ensName`; `Wallet` ganha `type` (enum
+   metamask/walletconnect/coinbase) e `referralCode` (opcional). Fixtures e testes
+   de contrato junto.
+7. **Criar `DELETE /api/wallets/:id`** (spec 08 §3.5), com 409 ao remover a única
+   primária e promoção da secundária mais antiga quando existe — avisando qual.
+8. **Nenhuma das duas telas tem frame mobile.** A derivação está no spec 08 §5, com
+   a referência de qual frame originou cada regra. Registrar como desvio consciente.
+
+**Abertas, sem bloquear ninguém**
+
+9. **Causa raiz do vazamento no logout não encontrada.** Dois investigadores
+   independentes (o agente da fase 5 e a coordenação) leram `use-auth.ts`,
+   `favorites.ts`, `use-session.ts` e a propagação de `scope` sem achar por que
+   alguns observadores da mesma query não recebem a notificação após
+   `queryClient.clear()`. O conserto em vigor — `clear()` + `location.reload()` —
+   **garante** o requisito eliminatório do §11; o custo é perder a suavidade de SPA
+   no logout. Vale investigar com calma depois da entrega.
+10. **O "modal sobre o catálogo" não mantém a página de fundo montada.** O TanStack
+    Router não tem intercepting routes; o retorno ao fluxo é por `redirect`. Atende
+    o §3 funcionalmente, não visualmente.
+11. **Não existe `specs/09-tempo-real.md`.** Todas as outras fases têm spec própria;
+    o conteúdo da 9 está só aqui.
+12. **A conexão declara o próprio dono** (`query: { userId: scope }` no handshake).
+    Num mock rodando no contexto da página não há cookie por conexão, mas é o
+    cliente afirmando identidade — aceitável aqui, jamais em produção.
+
 ## Limitação conhecida — flake residual na suíte E2E
 
 Para quem avalia: `pnpm test` roda 380 testes em desktop 1440 e mobile 390, e
@@ -417,3 +670,144 @@ sob carga. Rodar com `--workers=1` passa de forma consistente.
 
 Não foi perseguido até 100% por decisão consciente de prazo. O conserto é
 one-liner: asserir só o piso da latência, que é o que o teste de fato prova.
+
+**Fase 5 (novo, mesma família):** `e2e/runtime-behavior.spec.ts` — "Favoritos
+otimistas... cenário server-error" assere `aria-pressed` passando por `true`
+(otimista) e depois `false` (rollback) em sequência — uma rodada sob o
+paralelismo pesado da suíte inteira (4 workers, 408 testes) perdeu a leitura
+do `true` porque o rollback já tinha acontecido antes do primeiro poll do
+`expect`. Passou de forma consistente em 4 rodadas isoladas (grep escopado a
+"fase 5", sem o resto da suíte competindo por CPU). Mesma classe de flake dos
+itens acima — tolerância de tempo apertada, não lógica de app errada.
+Registrado, não perseguido, pela mesma decisão de prazo.
+
+**Correção de diagnóstico (fase 9).** O parágrafo acima explica o flake de *uma
+ou duas* falhas por rodada. Ele **não** explica as rodadas que falham às dezenas
+ou centenas — e atribuí-las à tolerância do `slow` faz quem lê perseguir o
+problema errado.
+
+Essas rodadas têm outra causa, e ela aparece no log:
+
+```
+/bin/sh: line 1: 42719 Killed: 9  pnpm preview --port 4173
+```
+
+O `vite preview` é morto com SIGKILL no meio da suíte por pressão de memória da
+máquina (jetsam do macOS), e a partir daí todo teste falha com
+`net::ERR_CONNECTION_REFUSED`. Não é regressão e não é flake de teste: é o
+servidor morrendo.
+
+Provado por controle: a mesma `dev`, **sem nenhuma mudança nova**, colapsou de
+380/380 para 79 passed / 301 failed quando rodada com a máquina carregada, com a
+mesma linha `Killed: 9`. Toda spec que falha nessas rodadas passa em isolamento.
+
+Como evitar: `--workers=1` (o que o CI já faz), e nunca duas suítes ao mesmo
+tempo na mesma máquina.
+
+## Fase 9 — Tempo real com Socket.IO
+
+Decisões e limitações do §7 do desafio e do transporte do §6.
+
+23. **Transporte: `ws.link` do MSW + `@mswjs/socket.io-binding`, com um curinga
+    no path.** O `WebSocketHandler` do MSW **remove o prefixo `/socket.io/` do
+    path do cliente antes de casar** (acomodação interna para o protocolo), então
+    qualquer padrão que mencione `socket.io` — `'*/socket.io/'` incluído — nunca
+    casa: a conexão sai para a rede real e o handler não roda (na demo, um 200 do
+    servidor de arquivos, com reconexão infinita). O link é `ws.link('*')`; é o
+    único WebSocket do app, o curinga não gera ambiguidade.
+
+24. **`socket.io-client` é carregado por `import()` dinâmico, e isso é
+    obrigatório.** O `engine.io-client` captura o construtor de WebSocket uma
+    única vez, na avaliação do módulo (`const WebSocketCtor =
+    globalThis.WebSocket`). Importado estaticamente, ele é avaliado antes de
+    `worker.start()` trocar o global e guarda o WebSocket nativo — a conexão então
+    ignora o MSW por completo. Carregar depois dos mocks é o que faz o binding
+    interceptar. Efeito colateral bem-vindo: o cliente sai do chunk principal.
+
+25. **Contrato do evento.** `src/types/events.ts` (fase 1) já definia
+    `eventId`/`type`/`resource`/`version`/`emittedAt`/`data`. `eventId` é
+    `${resource.id}:v${version}` — identidade estável e derivável, não aleatória.
+
+26. **Ponto único de emissão: `bumpNftVersion` (`src/mocks/db.ts`).** Toda mutação
+    de edição já passava por ali (é o que recalcula `priceEth`/`available`), então
+    emitir `nft.updated` dali é o que garante o §6: REST e evento não podem
+    divergir, porque saem do mesmo lugar. Nenhum call site precisou mudar.
+
+27. **`order.updated` tem dois gatilhos, um só efeito.** `resolveOrderIfDue`
+    resolve o pagamento e emite; é chamado pelo `setTimeout` da criação (tempo
+    real, sem polling) e pelo `GET /orders/:id` (recuperação após refresh, quando
+    o timer morreu com a página). Quem chega segundo encontra `status !==
+    'pending'` e sai. Pedido confirmado ou recusado é terminal.
+
+28. **Duplicata e evento antigo são UMA guarda, não duas.** O cliente mantém um
+    `ledger` (recurso → maior `version` aplicada) e só aceita `version`
+    estritamente maior. Duplicata chega com versão igual, evento atrasado com
+    versão menor: nenhum dos dois passa, nenhum efeito é reaplicado.
+
+29. **O que o evento aplica direto e o que ele revalida.** O detalhe recebe patch
+    direto do payload (preço, disponibilidade, edições) — sem ida ao servidor.
+    Catálogo, destaque e carrinho são **invalidados**, não recalculados: menor
+    preço entre edições, soma de disponíveis e subtotal são regra de negócio do
+    mock, e reimplementá-las no cliente as duplicaria.
+
+30. **Reconciliação pós-reconexão.** No evento `connect` que não é o primeiro
+    daquele socket, `invalidateQueries({ refetchType: 'active' })` — literalmente
+    "reconcilie os recursos ativos com o REST". O teste prova que funciona
+    mudando o preço **enquanto o cliente está fora** (o evento sai para zero
+    conexões) e exigindo que a tela chegue ao valor novo mesmo assim.
+
+31. **Isolamento entre usuários: filtro no servidor + socket por escopo.** A
+    conexão declara seu dono no handshake (`query.userId`, o mesmo `scope` das
+    query keys) e o mock só entrega `order.updated` a conexões daquele dono;
+    `nft.updated` é público. O efeito depende de `scope`, então login, logout e
+    troca de usuário fecham o socket anterior (`removeAllListeners()` +
+    `disconnect()`) e abrem outro — um evento de sessão anterior não tem para
+    onde ir. Como o binding não tem rooms nem namespaces, o fan-out é um `Set` de
+    conexões com esse filtro.
+
+32. **Cenário obrigatório do §7, e o que ficou para a fase 7.** Passos 1–3 estão
+    completos: NFT no carrinho, mudança de preço durante a navegação, aviso na
+    interface (toast com o preço novo) e resumo atualizado (a query do carrinho é
+    invalidada; o badge do header passou a ter contagem real). O passo 4 — o
+    checkout impedir a confirmação — tem as duas metades prontas: o servidor já
+    devolve 409 `quote_outdated`, e `src/features/checkout/quote-freshness.ts`
+    expõe a mesma decisão como função pura (`isQuoteStale`, comparando o
+    `nftVersion` da cotação com o do carrinho relido). **A tela que consome isso é
+    a fase 7**; aqui ficam a regra e a chave de cache (`orderKey`, `cartKey`).
+
+33. **Keepalive manual.** O binding sintetiza um handshake anunciando
+    `pingInterval: 25000` e ninguém manda ping; sem isso o `engine.io-client`
+    derrubaria a conexão por "ping timeout" em 30s e ficaria reconectando. O mock
+    envia `'2'` (PING do engine.io) a cada 20s.
+
+34. **`window.__realtime` é instrumento, não caminho de simulação.** Contadores
+    (recebidos, aplicados, descartados, reconexões, reconciliações) para o
+    Playwright poder assertar que a guarda de versão **descartou** — algo que não
+    tem efeito visível na tela, por definição. Os eventos continuam chegando só
+    pelo `socket.io-client`; `window.__mocks.realtime.*` mexe no db simulado, e é
+    o db que emite.
+
+35. **Os gates novos foram forçados a falhar.** Quatro mutações (guarda de versão,
+    filtro por dono, reconciliação no `connect`, aviso no carrinho) foram aplicadas
+    de uma vez: falharam exatamente os quatro testes correspondentes e os outros
+    quatro continuaram verdes — os gates acusam e são específicos.
+
+36. **Asserção de preço renderizado só no desktop.** Três testes ficaram em
+    `test.describe('tempo real na interface (desktop)')`: no mobile o Buy Bar
+    mostra preço × quantidade (formatado por `roundEth`, que corta zero à direita)
+    e o carrossel de relacionados reusa o card de desktop — fixar texto de preço
+    nas duas viewports testaria a formatação das fases 3/4, não o evento. Os cinco
+    testes que cobrem os requisitos do §7 rodam nos dois projetos.
+
+### Limitações do transporte no ambiente de mocks (exigência do §6)
+
+- Sem namespaces, rooms ou broadcast do Socket.IO: o binding não os implementa.
+- Só o transporte `websocket` é interceptado — o cliente força
+  `transports: ['websocket']`; o long-polling default cairia em HTTP sem handler.
+- Handshake e ping são sintetizados: não há servidor real, logo nem ACK de evento
+  (`socket.emit` com callback) nem `volatile`/`binary` foram exercitados.
+- "Servidor" e "cliente" compartilham o contexto da página: uma aba nunca vê
+  evento de outra, e o isolamento entre usuários é por conexão, não por processo.
+- O timer que resolve o pedido morre com a página. É *desejável* — é o cenário de
+  "interrupção enquanto o pedido está pendente" do §7 — e a recuperação é o
+  `GET /orders/:id`, que resolve na leitura sem criar outra compra.

@@ -1,4 +1,5 @@
-import { resetDb } from './db'
+import { bumpNftVersion, db, persist, resetDb } from './db'
+import { connectionCount, disconnectAll, replayEvent } from './realtime'
 import {
   SCENARIOS,
   setScenario,
@@ -22,8 +23,36 @@ declare global {
       getScenario: () => ScenarioName
       reset: () => void
       scenarios: readonly ScenarioName[]
+      /** Fase 9. Alavancas do "backend" simulado: editam o db (portanto o
+       * REST) e, por consequência de `bumpNftVersion`, emitem o evento
+       * correspondente pelo socket. Nenhuma delas toca na UI ou no cache. */
+      realtime: {
+        editNftPrice: (nftId: string, priceEth: string) => void
+        setNftAvailable: (nftId: string, available: number) => void
+        replay: (offsetFromEnd?: number) => string | null
+        disconnect: () => void
+        connections: () => number
+      }
     }
   }
+}
+
+/** Muda o preço da 1ª edição de um NFT como um backend faria: REST e evento
+ * saem do mesmo ponto (`bumpNftVersion`), nunca divergem (§6). */
+function editNftPrice(nftId: string, priceEth: string): void {
+  const nft = db.nfts.find((n) => n.id === nftId)
+  if (!nft?.editions[0]) throw new Error(`Unknown nft: ${nftId}`)
+  nft.editions[0].priceEth = priceEth
+  bumpNftVersion(nftId)
+  persist()
+}
+
+function setNftAvailable(nftId: string, available: number): void {
+  const nft = db.nfts.find((n) => n.id === nftId)
+  if (!nft?.editions[0]) throw new Error(`Unknown nft: ${nftId}`)
+  nft.editions[0].available = available
+  bumpNftVersion(nftId)
+  persist()
 }
 
 export function installMockControls(): void {
@@ -50,5 +79,12 @@ export function installMockControls(): void {
     getScenario: activeScenario,
     reset: resetDb,
     scenarios: SCENARIOS,
+    realtime: {
+      editNftPrice,
+      setNftAvailable,
+      replay: (offsetFromEnd) => replayEvent(offsetFromEnd)?.eventId ?? null,
+      disconnect: disconnectAll,
+      connections: connectionCount,
+    },
   }
 }

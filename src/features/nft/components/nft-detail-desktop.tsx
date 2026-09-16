@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import type { NftDetailViewProps } from '@/features/nft/detail-state'
 import { cn, linkFocusRing } from '@/lib/utils'
-import { CATEGORY_LABELS } from '../labels'
+import { CATEGORY_LABELS, tokenIdOf } from '../labels'
 import { RelatedCarousel } from './related-carousel'
 
 /**
@@ -22,6 +22,8 @@ export function NftDetailDesktop(props: NftDetailViewProps) {
     onSelectImage,
     onBuy,
     isBuying,
+    isFavorited,
+    onToggleFavorite,
   } = props
   const [zoomOpen, setZoomOpen] = useState(false)
 
@@ -29,7 +31,7 @@ export function NftDetailDesktop(props: NftDetailViewProps) {
   const allSoldOut = nft.editions.every((e) => e.available === 0)
   const price = selectedEdition?.priceEth ?? nft.priceEth
   const filledStars = Math.floor(Number(nft.ratingAvg))
-  const tokenId = `#${nft.id.replace('nft-', '').padStart(4, '0')}`
+  const tokenId = tokenIdOf(nft.id)
   const shareUrl = typeof window !== 'undefined' ? window.location.href : ''
 
   return (
@@ -109,7 +111,7 @@ export function NftDetailDesktop(props: NftDetailViewProps) {
           <div className="flex flex-1 flex-col justify-between">
             <div className="flex flex-col gap-3">
               <h1 className="text-heading-28 font-bold text-foreground">{nft.title}</h1>
-              <p className="text-title-22 leading-[16px] font-bold text-text-accent">{price} ETH</p>
+              <p data-testid="nft-price" className="text-title-22 leading-[16px] font-bold text-text-accent">{price} ETH</p>
 
               <div className="flex items-center gap-2">
                 <div
@@ -216,11 +218,12 @@ export function NftDetailDesktop(props: NftDetailViewProps) {
 
                 <button
                   type="button"
-                  disabled
+                  onClick={onToggleFavorite}
                   aria-label="Favoritar"
-                  className="flex h-10 w-[130px] items-center justify-center gap-[8px] rounded-[6px] border border-primary text-body-14 font-medium text-text-accent disabled:opacity-50"
+                  aria-pressed={isFavorited}
+                  className="flex h-10 w-[130px] items-center justify-center gap-[8px] rounded-[6px] border border-primary text-body-14 font-medium text-text-accent"
                 >
-                  <Heart aria-hidden className="size-5" />
+                  <Heart aria-hidden fill={isFavorited ? 'currentColor' : 'none'} className="size-5" />
                   Favoritar
                 </button>
 

@@ -32,6 +32,8 @@
    * no gradiente do card mobile do catálogo, agora nomeada como token. */
   --color-surface-raised: #2f1d15;
   --color-amber: #e3a44e;
+  /* Fase 5 (specs/05-auth.md §2): régua entre as abas do modal de auth. */
+  --color-text-coral: #f0805f;
 
   /* Type scale (Figma: Display / Heading / Body Large / Body / Caption / Tiny) */
   --text-tiny-9: 0.5625rem;
@@ -47,8 +49,16 @@
   --text-display-43: 2.6875rem;
   /* Fase 4 (specs/04-detalhe-nft.md §1). */
   --text-title-20: 1.25rem;
+  /* Fase 6 (specs/06-carrinho.md §6.6): glifo `+` do stepper do card mobile. */
+  --text-title-21: 1.3125rem;
   --text-title-22: 1.375rem;
   --text-heading-28: 1.75rem;
+  /* Fase 5 (specs/05-auth.md §2): abas do modal de auth, 20px/500/lh 16 —
+   * companion --line-height segue o padrão Tailwind v4 de bundling do
+   * tamanho da fonte; o peso 500 é aplicado via `font-medium` no call-site
+   * (nenhuma escala existente empacota font-weight). */
+  --text-title-20-medium: 1.25rem;
+  --text-title-20-medium--line-height: 1rem;
 
   /* Layout: Figma desktop frame is 1440 with a 1200 content column */
   --container-content: 75rem;

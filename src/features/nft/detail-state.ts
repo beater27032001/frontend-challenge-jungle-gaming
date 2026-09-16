@@ -16,4 +16,9 @@ export interface NftDetailViewProps {
   onSelectImage: (index: number) => void
   onBuy: () => void
   isBuying: boolean
+  // Fase 5 (specs/05-auth.md §4): mesmo motivo do resto do estado desta
+  // interface — desktop/mobile montam juntos, então não pode viver dentro
+  // de cada composição.
+  isFavorited: boolean
+  onToggleFavorite: () => void
 }
