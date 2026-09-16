@@ -140,10 +140,11 @@ Roteiro para quem nunca abriu o projeto. Em todos os casos: `pnpm dev`, e a base
 `http://localhost:5173`. Sempre que quiser voltar ao estado limpo, abra
 `http://localhost:5173/?mock-reset=1` e rode `window.__mocks.setScenario('default')`.
 
-As telas entregues hoje são **Início/catálogo** (`/`) e **Detalhes do NFT**
-(`/nft/nft-001`). Os cenários cujo ponto de entrada na interface pertence a uma fase ainda
-não entregue (carrinho, checkout, login) estão marcados abaixo com a rota REST pela qual
-reproduzi-los — cada um tem cobertura executável em `e2e/api-contracts.spec.ts`.
+Todas as telas do fluxo principal estão de pé: catálogo (`/`), detalhe (`/nft/nft-001`),
+login e cadastro, carrinho (`/carrinho`), pagamento (`/pagamento`), perfil (`/perfil`) e
+carteiras (`/carteiras`). Cada cenário abaixo traz o caminho pela tela; onde ainda citamos
+a rota REST, é porque ela é a forma mais direta de provocar o estado, não porque falte
+interface. Todos têm cobertura executável em `e2e/`.
 
 ### Carregamento lento e skeletons — `slow`
 
@@ -235,33 +236,47 @@ sempre de `POST /api/quote` — nunca de cálculo local.
 
 ### Preço alterado durante a compra — `price-changed`
 
-1. `window.__mocks.setScenario('price-changed')`.
-2. Cote e tente criar o pedido (`POST /api/quote` e depois `POST /api/orders`).
-3. **Esperado:** 409 `quote_outdated` — a cotação usada não vale mais, porque o preço da
-   edição subiu 10% entre a cotação e a criação do pedido. A tela de pagamento que exibe isso
-   e pede nova confirmação é a fase 7.
+1. Com itens no carrinho, vá para `/pagamento`.
+2. `window.__mocks.setScenario('price-changed')`.
+3. Clique em **Confirmar compra**.
+4. **Esperado:** a compra **não** acontece. O preço da edição subiu 10% entre a cotação e o
+   pedido, a API responde 409 `quote_outdated`, e a tela avisa e **bloqueia o confirmar** até
+   você recotar. É o passo 4 do cenário obrigatório do §7 do desafio.
+
+Para ver o aviso chegar **em tempo real**, sem recarregar, deixe `/pagamento` aberto e rode
+`window.__mocks.realtime.editNftPrice('nft-003', '2.5')` noutra aba do console: o evento
+`nft.updated` invalida a cotação e o confirmar trava sozinho.
 
 ### Edição esgotada durante a compra — `sold-out`
 
-Igual ao anterior, com `sold-out`: `POST /api/orders` responde 409
-`availability_conflict` porque o `available` da edição cotada foi a zero. O NFT `nft-013` já
+Igual ao anterior, com `sold-out`: o confirmar é bloqueado porque a API responde 409
+`availability_conflict` — o `available` da edição cotada foi a zero. O NFT `nft-013` já
 nasce esgotado na fixture, e `nft-007`/`nft-021` nascem com 2 e 1 unidades — úteis para
 exercitar limite de quantidade no detalhe, sem cenário nenhum.
 
 ### Timeout após criar o pedido, com recuperação por idempotência — `order-timeout`
 
-1. `window.__mocks.setScenario('order-timeout')`.
-2. Envie `POST /api/orders` com um header `Idempotency-Key` seu.
-3. **Esperado:** a primeira tentativa falha como erro de rede (o cliente não sabe se o pedido
-   nasceu). **Repita a mesma chamada com a mesma `Idempotency-Key`:** a resposta traz **o
-   mesmo pedido**, não um segundo. É o que impede pedido duplicado por clique repetido ou
-   reenvio.
+1. Em `/pagamento`, rode `window.__mocks.setScenario('order-timeout')`.
+2. Clique em **Confirmar compra**. A primeira tentativa falha como erro de rede — o cliente
+   não sabe se o pedido nasceu.
+3. Clique em **Tentar novamente**.
+4. **Esperado:** volta **o mesmo pedido**, não um segundo. A chave de idempotência é derivada
+   da cotação e da carteira, não sorteada, então o reenvio é reconhecido. É o que impede
+   pedido duplicado por clique repetido ou por reenvio após timeout.
+
+No nível REST, o equivalente é repetir o `POST /api/orders` com a mesma `Idempotency-Key`.
 
 ### Pagamento recusado — `payment-declined`
 
-`window.__mocks.setScenario('payment-declined')` e crie um pedido: ele resolve para
-`status: 'declined'` em vez de `confirmed`. A tela de confirmação com o resultado recusado é a
-fase 7.
+Em `/pagamento`, rode `window.__mocks.setScenario('payment-declined')` e confirme a compra.
+O pedido nasce `pending` e resolve para `declined` em vez de `confirmed` — **nenhuma
+confirmação aparece**, porque a regra do projeto é que só pedido confirmado pela simulação
+vira confirmação.
+
+**Repare no carrinho depois:** os itens voltam, e o estoque também. A criação debita de
+imediato (reserva otimista, que é o que impede dois pedidos concorrentes de levarem a mesma
+edição), mas recusa é terminal e estorna — o §3 exige preservar os itens em falha. Se o
+catálogo estiver aberto noutra aba, o estoque volta lá em tempo real, via `nft.updated`.
 
 ## Comandos
 
@@ -347,12 +362,12 @@ PR para `dev`. Histórico das entregas em `.pipeline/history/LOG.md`.
 | 4 | Detalhes do NFT (galeria, edição, quantidade, compra) | entregue |
 | 5 | Conta e sessão (login, cadastro, logout, favoritos) | entregue |
 | 6 | Carrinho (quantidade, remoção, cupom, cotação) | entregue |
-| 7 | Checkout + confirmação | a fazer |
+| 7 | Checkout + confirmação | entregue |
 | 8 | Perfil + carteiras | entregue |
 | 9 | Tempo real (`nft.updated`, `order.updated`) | entregue |
 | 10 | Testes E2E completos | feita ao longo das fases |
 | 11 | Acessibilidade + Lighthouse | a11y contínua; Lighthouse não executado |
-| 12 | Deploy + documentação | em andamento (este README; URL pública pendente) |
+| 12 | Deploy + documentação | entregue (este README + Vercel) |
 
 O que já está de pé e pode ser avaliado hoje:
 
@@ -365,6 +380,10 @@ O que já está de pé e pode ser avaliado hoje:
 - **conta e sessão**: login, cadastro, logout, sessão expirada e retomada do fluxo, mais
   favoritos com atualização otimista e rollback;
 - o **carrinho**: quantidade, remoção, cupom válido/inválido/expirado e cotação da API;
+- o **checkout** (`/pagamento`): revalidação antes de confirmar, chave de idempotência
+  derivada que impede pedido duplicado, os estados pendente/confirmado/recusado com
+  recuperação após refresh, e a confirmação como modal sobre a própria página — só para
+  pedido efetivamente confirmado pela simulação;
 - **tempo real** pelo `socket.io-client`: `nft.updated` e `order.updated`, com guarda de
   versão, tolerância a duplicata e a evento antigo, e reconciliação após reconexão;
 - o **perfil do colecionador** (`/perfil`) e as **carteiras** (`/carteiras`), rotas privadas
@@ -373,4 +392,5 @@ O que já está de pé e pode ser avaliado hoje:
   de carteiras, com aviso de qual foi promovida ou rebaixada;
 - a suíte **Playwright** em desktop (1440) e mobile (390) cobrindo tudo isso.
 
-Falta o **checkout com confirmação** (fase 7).
+Todas as fases de fluxo estão entregues. O que fica de fora por decisão de prazo está em
+**Limitações conhecidas**.
