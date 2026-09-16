@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import type { NftDetailViewProps } from '@/features/nft/detail-state'
 import { cn, linkFocusRing } from '@/lib/utils'
-import { CATEGORY_LABELS } from '../labels'
+import { CATEGORY_LABELS, tokenIdOf } from '../labels'
 import { RelatedCarousel } from './related-carousel'
 
 /**
@@ -29,7 +29,7 @@ export function NftDetailDesktop(props: NftDetailViewProps) {
   const allSoldOut = nft.editions.every((e) => e.available === 0)
   const price = selectedEdition?.priceEth ?? nft.priceEth
   const filledStars = Math.floor(Number(nft.ratingAvg))
-  const tokenId = `#${nft.id.replace('nft-', '').padStart(4, '0')}`
+  const tokenId = tokenIdOf(nft.id)
   const shareUrl = typeof window !== 'undefined' ? window.location.href : ''
 
   return (
