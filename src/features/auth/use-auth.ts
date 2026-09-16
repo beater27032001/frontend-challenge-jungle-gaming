@@ -57,7 +57,11 @@ export function useLogout(): UseMutationResult<void, unknown, void> {
     // (testado) que todo consumidor assenta corretamente.
     onSuccess: () => {
       queryClient.clear()
-      window.location.reload()
+      // Vai para a home, não recarrega no lugar: deslogar de uma rota privada
+      // (/perfil, /carteiras, /pagamento) recarregava lá, a guarda mandava para
+      // /login?redirect=<rota privada>, e fechar o modal voltava para a rota
+      // privada — que redirecionava de novo. Laço infinito, sem saída.
+      window.location.href = '/'
     },
   })
 }
