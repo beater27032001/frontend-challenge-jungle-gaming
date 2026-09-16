@@ -305,7 +305,12 @@ export function NftDetailDesktop(props: NftDetailViewProps) {
 
         <NftDetailTabs nft={nft} />
 
-        <RelatedCarousel nft={nft} />
+        {/* pb-14 (56px) até o rodapé: o carrossel encostava nele. 56 é o passo
+            vertical que o catálogo já usa (specs/03-catalogo.md §3), e não um
+            número novo — mesma régua que separou a paginação da home. */}
+        <div className="pb-14">
+          <RelatedCarousel nft={nft} />
+        </div>
       </div>
     </div>
   )
