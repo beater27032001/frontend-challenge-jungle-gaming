@@ -29,6 +29,15 @@ function RootLayout() {
   // componente).
   const pathname = useLocation({ select: (l) => l.pathname })
   const isNftDetail = pathname.startsWith('/nft/')
+  // Fase 5 (specs/05-auth.md §8): no mobile, login/cadastro são telas
+  // cheias com a própria composição (logo, título, form) — sem
+  // MobileSearchBar/TabBar, mesmo tratamento do detalhe do NFT. No desktop
+  // o Header/Footer seguem normais; a rota renderiza a "aparência de modal"
+  // sobre o `<main>` (ver ARCHITECTURE.md — compromisso registrado: não é
+  // um catálogo de fato montado por trás, é `redirect` de volta à página de
+  // origem).
+  const isAuthRoute = pathname === '/login' || pathname === '/cadastro'
+  const isBareMobile = isNftDetail || isAuthRoute
 
   return (
     <div className="min-h-dvh bg-background text-foreground">
@@ -39,15 +48,19 @@ function RootLayout() {
         Pular para o conteúdo
       </a>
       <Header withDivider={!isNftDetail} />
-      {!isNftDetail && <MobileSearchBar />}
+      {!isBareMobile && <MobileSearchBar />}
       {/* pb-[126px] evita que a TabBar fixa encubra o fim do conteúdo em
           telas < lg (critério 18); some em lg, onde não há TabBar. Em
-          /nft/* a Buy Bar (164px) ocupa esse lugar em vez da TabBar. */}
-      <main id="main" className={cn(isNftDetail ? 'pb-[164px]' : 'pb-[126px]', 'lg:pb-0')}>
+          /nft/* a Buy Bar (164px) ocupa esse lugar em vez da TabBar; em
+          /login e /cadastro a tela mobile não tem barra nenhuma no fundo. */}
+      <main
+        id="main"
+        className={cn(isNftDetail ? 'pb-[164px]' : isAuthRoute ? 'pb-0' : 'pb-[126px]', 'lg:pb-0')}
+      >
         <Outlet />
       </main>
       <Footer />
-      {!isNftDetail && <TabBar />}
+      {!isBareMobile && <TabBar />}
       <Toaster theme="dark" />
     </div>
   )

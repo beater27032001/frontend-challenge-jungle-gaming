@@ -2,6 +2,8 @@ import { QueryClientProvider } from '@tanstack/react-query'
 import { createRouter, RouterProvider } from '@tanstack/react-router'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+import { toast } from 'sonner'
+import { onSessionExpired } from '@/lib/api'
 import { queryClient } from '@/lib/query'
 import { startMocks } from '@/mocks'
 import { routeTree } from './routeTree.gen'
@@ -43,6 +45,21 @@ declare module '@tanstack/react-router' {
     router: typeof router
   }
 }
+
+// Fase 5 (specs/05-auth.md §4/§6/§9): registrado onde router e queryClient
+// já coexistem. `/login` é rota real (não search param) — `redirect` carrega
+// a página em que o usuário estava, o "retorno ao fluxo anterior" (§3):
+// relogar retoma na mesma tela. `replace: true` não empilha histórico.
+onSessionExpired(() => {
+  queryClient.clear()
+  toast.error('Sessão expirada. Entre novamente para continuar.')
+  const current = router.state.location.pathname
+  router.navigate({
+    to: '/login',
+    search: { redirect: current === '/' ? undefined : current },
+    replace: true,
+  })
+})
 
 // Mocks must be listening before React issues its first request.
 startMocks().then(() => {
