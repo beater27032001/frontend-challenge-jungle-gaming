@@ -34,6 +34,10 @@ const inputClassName =
 const socialButtonClassName =
   'flex h-10 w-full cursor-not-allowed items-center justify-center gap-3 rounded-[5px] border border-border-strong text-body-13 font-medium text-text-secondary opacity-50'
 
+/** Rotas com guarda de sessão. Fechar o modal de auth não pode navegar para
+ * elas: a guarda devolveria para /login e o modal reabriria. */
+const PRIVATE_ROUTES = new Set(['/perfil', '/carteiras', '/pagamento'])
+
 function DesktopTabs({ active, redirectTo }: { active: 'login' | 'register'; redirectTo: string }) {
   const search = { redirect: redirectTo === '/' ? undefined : redirectTo }
   return (
@@ -83,7 +87,10 @@ function DesktopShell({
   const navigate = rootRoute.useNavigate()
   const isDesktop = useMediaQuery('(min-width: 1024px)')
   function close() {
-    navigate({ to: redirectTo })
+    // Fechar NUNCA pode voltar para uma rota privada: a guarda dela manda de
+    // volta para /login com o mesmo `redirect`, e o modal reabre — laço sem
+    // saída. Visitante que caiu aqui vindo de /perfil fecha e vai para a home.
+    navigate({ to: PRIVATE_ROUTES.has(redirectTo) ? '/' : redirectTo })
   }
 
   // Só monta o Dialog do Radix (focus trap/Esc) em >=lg — ver

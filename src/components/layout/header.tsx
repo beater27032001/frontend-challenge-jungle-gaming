@@ -92,15 +92,22 @@ export function Header({ withDivider = true }: { withDivider?: boolean }) {
           >
             Início
           </Link>
-          {/* Mercado/Criadores/Aprenda não têm rota ainda — um link falso é
-              pior a11y que texto simples; viram <Link> quando a rota nascer.
-              Mercado já recebe o estilo ativo no fluxo de mercado. */}
-          <span
+          {/* "Mercado" é a grade do catálogo, que vive na própria home — vai
+              para lá e ancora na seção, em vez de ser texto morto. Criadores e
+              Aprenda não têm destino algum: link falso é pior a11y que texto
+              simples, então seguem inertes até a rota nascer. */}
+          <Link
+            to="/"
+            hash="catalogo"
             aria-current={active === 'Mercado' ? 'page' : undefined}
-            className={cn('text-body-16', active === 'Mercado' ? 'text-text-accent underline' : 'text-foreground')}
+            className={cn(
+              'text-body-16',
+              linkFocusRing,
+              active === 'Mercado' ? 'text-text-accent underline' : 'text-foreground',
+            )}
           >
             Mercado
-          </span>
+          </Link>
           <span className="text-body-16 text-foreground">Criadores</span>
           <span className="text-body-16 text-foreground">Aprenda</span>
         </nav>
@@ -162,14 +169,22 @@ export function Header({ withDivider = true }: { withDivider?: boolean }) {
             </Link>
             {session.data ? (
               <div className="flex items-center gap-3">
-                <img
-                  src={session.data.user.avatarUrl}
-                  alt=""
-                  className="size-6 shrink-0 rounded-full object-cover"
-                />
-                <span className="max-w-[120px] truncate text-body-16 text-foreground">
-                  {session.data.user.name}
-                </span>
+                {/* Avatar e nome são o caminho para o perfil — era o que
+                    faltava para /perfil ter entrada pela interface no desktop
+                    (no mobile é a TabBar). */}
+                <Link
+                  to="/perfil"
+                  className={cn(linkFocusRing, 'flex items-center gap-3 rounded-[3px]')}
+                >
+                  <img
+                    src={session.data.user.avatarUrl}
+                    alt=""
+                    className="size-6 shrink-0 rounded-full object-cover"
+                  />
+                  <span className="max-w-[120px] truncate text-body-16 text-foreground">
+                    {session.data.user.name}
+                  </span>
+                </Link>
                 <Button
                   type="button"
                   disabled={logout.isPending}
