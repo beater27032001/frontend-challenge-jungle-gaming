@@ -1,4 +1,4 @@
-import { useQuery, type UseQueryResult } from '@tanstack/react-query'
+import { queryOptions, useQuery, type UseQueryResult } from '@tanstack/react-query'
 import axios from 'axios'
 import { api } from '@/lib/api'
 import type { Session } from '@/types'
@@ -16,17 +16,25 @@ import type { Session } from '@/types'
  */
 export const sessionKey = ['session'] as const
 
+/**
+ * Fase 8: extraído para `queryOptions` porque o `beforeLoad` das rotas
+ * privadas (`/perfil`, `/carteiras`) precisa da MESMA query — proteção de
+ * fluxo privado pelo router, como pede o §4 do desafio, sem um segundo
+ * caminho de leitura de sessão.
+ */
+export const sessionOptions = queryOptions({
+  queryKey: sessionKey,
+  queryFn: async () => {
+    try {
+      return (await api.get<Session>('/auth/session')).data
+    } catch (err) {
+      if (axios.isAxiosError(err) && err.response?.status === 401) return null
+      throw err
+    }
+  },
+  retry: false,
+})
+
 export function useSession(): UseQueryResult<Session | null> {
-  return useQuery({
-    queryKey: sessionKey,
-    queryFn: async () => {
-      try {
-        return (await api.get<Session>('/auth/session')).data
-      } catch (err) {
-        if (axios.isAxiosError(err) && err.response?.status === 401) return null
-        throw err
-      }
-    },
-    retry: false,
-  })
+  return useQuery(sessionOptions)
 }

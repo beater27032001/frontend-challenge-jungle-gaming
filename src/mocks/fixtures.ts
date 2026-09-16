@@ -8,7 +8,10 @@ import type { Db } from './db'
  * tables and the loop index so two fresh builds are byte-identical.
  */
 
-export const SEED_VERSION = 5
+// 6 (fase 8): `username`/`ensName` no usuário e `type`/`referralCode` na
+// carteira. Sem o bump, um localStorage da fase anterior serviria perfil sem
+// esses campos.
+export const SEED_VERSION = 6
 
 // --- fixed tables -----------------------------------------------------
 
@@ -245,6 +248,8 @@ export function buildInitialDb(): Db {
       {
         id: 'u-ana',
         name: 'Ana Volt',
+        username: 'anavolt',
+        ensName: 'anavolt.eth',
         email: 'ana@greenmint.dev',
         avatarUrl: '/nft/ape-01.webp',
         bio: 'Colecionadora de arte generativa desde o primeiro bloco.',
@@ -255,6 +260,8 @@ export function buildInitialDb(): Db {
       {
         id: 'u-bruno',
         name: 'Bruno Chain',
+        username: 'brunochain',
+        ensName: '',
         email: 'bruno@greenmint.dev',
         avatarUrl: '/nft/ape-02.webp',
         bio: 'Explorando fotografia on-chain nos fins de semana.',
@@ -320,7 +327,9 @@ export function buildInitialDb(): Db {
           label: 'Carteira Principal',
           address: ANA_ETH_ADDRESS,
           network: 'ethereum',
+          type: 'metamask',
           role: 'primary',
+          referralCode: 'KURIO-ANA',
           createdAt: '2025-06-01T00:05:00.000Z',
         },
         {
@@ -328,6 +337,7 @@ export function buildInitialDb(): Db {
           label: 'Carteira Polygon',
           address: ANA_POLYGON_ADDRESS,
           network: 'polygon',
+          type: 'walletconnect',
           role: 'secondary',
           createdAt: '2025-06-02T00:00:00.000Z',
         },
@@ -338,6 +348,7 @@ export function buildInitialDb(): Db {
           label: 'Carteira Principal',
           address: BRUNO_ETH_ADDRESS,
           network: 'ethereum',
+          type: 'coinbase',
           role: 'primary',
           createdAt: '2025-07-10T00:05:00.000Z',
         },

@@ -282,7 +282,7 @@ Auditoria Lighthouse: **ainda sem comando próprio** — é a fase 11 (ver
 ```
 src/
   routes/      rotas file-based do TanStack Router (routeTree.gen.ts é gerado)
-  features/    um diretório por domínio: nft, cart, auth, checkout, profile, wallets
+  features/    um diretório por domínio: nft, cart, auth, checkout, account, realtime
   components/  ui/ = shadcn adaptado à identidade; resto = compartilhado entre features
   lib/         api.ts (axios), query.ts (queryClient), money.ts (big.js), utils.ts
   mocks/       MSW: handlers, db em memória + persistência, fixtures, cenários, controles
@@ -344,7 +344,7 @@ PR para `dev`. Histórico das entregas em `.pipeline/history/LOG.md`.
 | 5 | Conta e sessão (login, cadastro, logout, favoritos) | entregue |
 | 6 | Carrinho (quantidade, remoção, cupom, cotação) | entregue |
 | 7 | Checkout + confirmação | a fazer |
-| 8 | Perfil + carteiras | a fazer |
+| 8 | Perfil + carteiras | entregue |
 | 9 | Tempo real (`nft.updated`, `order.updated`) | entregue |
 | 10 | Testes E2E completos | feita ao longo das fases |
 | 11 | Acessibilidade + Lighthouse | a11y contínua; Lighthouse não executado |
@@ -363,6 +363,10 @@ O que já está de pé e pode ser avaliado hoje:
 - o **carrinho**: quantidade, remoção, cupom válido/inválido/expirado e cotação da API;
 - **tempo real** pelo `socket.io-client`: `nft.updated` e `order.updated`, com guarda de
   versão, tolerância a duplicata e a evento antigo, e reconciliação após reconexão;
+- o **perfil do colecionador** (`/perfil`) e as **carteiras** (`/carteiras`), rotas privadas
+  protegidas no router: nome, nome de usuário (único, 409 associado ao campo), nome ENS,
+  avatar e troca de senha; cadastro, edição, promoção a principal e remoção com confirmação
+  de carteiras, com aviso de qual foi promovida ou rebaixada;
 - a suíte **Playwright** em desktop (1440) e mobile (390) cobrindo tudo isso.
 
-Falta o **checkout com confirmação** (fase 7) e o **perfil com carteiras** (fase 8).
+Falta o **checkout com confirmação** (fase 7).
