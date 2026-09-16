@@ -21,6 +21,8 @@ export function NftDetailMobile(props: NftDetailViewProps) {
     onSelectImage,
     onBuy,
     isBuying,
+    isFavorited,
+    onToggleFavorite,
   } = props
   const router = useRouter()
   const canGoBack = useCanGoBack()
@@ -56,11 +58,16 @@ export function NftDetailMobile(props: NftDetailViewProps) {
             </button>
             <button
               type="button"
-              disabled
+              onClick={onToggleFavorite}
               aria-label="Favoritar"
-              className="flex size-[35px] items-center justify-center rounded-[17.5px] border border-border-strong bg-surface-raised disabled:opacity-50"
+              aria-pressed={isFavorited}
+              className="flex size-[35px] items-center justify-center rounded-[17.5px] border border-border-strong bg-surface-raised"
             >
-              <Heart aria-hidden className="h-[14.2px] w-4 text-foreground" />
+              <Heart
+                aria-hidden
+                fill={isFavorited ? 'currentColor' : 'none'}
+                className={cn('h-[14.2px] w-4 text-foreground', isFavorited && 'text-text-accent')}
+              />
             </button>
           </div>
 

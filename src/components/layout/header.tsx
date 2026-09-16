@@ -2,6 +2,8 @@ import { LogIn, Search, ShoppingCart } from 'lucide-react'
 import { Link, useLocation, useNavigate, useSearch } from '@tanstack/react-router'
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { useLogout } from '@/features/auth/use-auth'
+import { useSession } from '@/features/auth/use-session'
 import type { CatalogSearch } from '@/features/nft/search-params'
 import { cn, linkFocusRing } from '@/lib/utils'
 
@@ -30,6 +32,8 @@ export function Header({ withDivider = true }: { withDivider?: boolean }) {
   // montado pelo __root em toda rota, não só em '/'.
   const search = useSearch({ strict: false }) as Partial<CatalogSearch>
   const navigate = useNavigate()
+  const session = useSession()
+  const logout = useLogout()
   const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
@@ -141,11 +145,36 @@ export function Header({ withDivider = true }: { withDivider?: boolean }) {
                   aparece aqui. */}
               <ShoppingCart className="size-6" />
             </button>
-            <Button disabled className="h-[35px] w-[100px] gap-1 text-body-16 text-primary-foreground">
-              {/* fase 5 liga isto */}
-              <LogIn className="size-5" />
-              Entrar
-            </Button>
+            {session.data ? (
+              <div className="flex items-center gap-3">
+                <img
+                  src={session.data.user.avatarUrl}
+                  alt=""
+                  className="size-6 shrink-0 rounded-full object-cover"
+                />
+                <span className="max-w-[120px] truncate text-body-16 text-foreground">
+                  {session.data.user.name}
+                </span>
+                <Button
+                  type="button"
+                  disabled={logout.isPending}
+                  onClick={() => logout.mutate()}
+                  className="h-[35px] w-[85px] text-body-16 text-primary-foreground"
+                >
+                  {logout.isPending ? 'Saindo…' : 'Sair'}
+                </Button>
+              </div>
+            ) : (
+              <Button asChild className="h-[35px] w-[100px] gap-1 text-body-16 text-primary-foreground">
+                {/* Fase 5 (specs/05-auth.md §9): rota real, não search param
+                    — `redirect` carrega a página de origem para o "retorno
+                    ao fluxo anterior" (§3). */}
+                <Link to="/login" search={{ redirect: pathname === '/' ? undefined : pathname }}>
+                  <LogIn className="size-5" />
+                  Entrar
+                </Link>
+              </Button>
+            )}
           </div>
         </div>
       </div>
