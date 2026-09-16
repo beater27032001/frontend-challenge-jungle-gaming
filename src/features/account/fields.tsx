@@ -48,8 +48,14 @@ export function AccountFormLabel({
   children: React.ReactNode
   required?: boolean
 }) {
+  // `h-[29px]`: o asterisco é 22px com `leading-[29px]` (Figma), o rótulo é
+  // 15/15. Sem altura fixa a linha do rótulo mede 29 COM asterisco e 15 SEM,
+  // e as duas colunas de uma FieldRow saem desalinhadas por 14px — foi
+  // exatamente isso entre "E-mail" (com) e "Nome ENS" (sem), e entre
+  // "Apelido da carteira" (com) e "Avatar" (sem). 29 é a altura máxima que o
+  // auto-layout do Figma já produz; fixá-la alinha sem inventar medida.
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex h-[29px] items-center gap-1">
       <FormLabel className="text-body-15 leading-[15px] font-normal text-foreground">
         {children}
       </FormLabel>
@@ -69,8 +75,9 @@ export function PlainLabel({
   children: React.ReactNode
   required?: boolean
 }) {
+  // Mesma altura fixa do AccountFormLabel, pelo mesmo motivo.
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex h-[29px] items-center gap-1">
       <label htmlFor={htmlFor} className="text-body-15 leading-[15px] text-foreground">
         {children}
       </label>
@@ -185,7 +192,10 @@ export function EnsField<T extends FieldValues>({
       control={control}
       name={name}
       render={({ field }) => (
-        <FormItem className={cn('flex flex-col gap-1', fieldWidth)}>
+        // `gap-[10px]`, não `gap-1`: os vizinhos de linha (AccountTextField e
+        // o bloco do e-mail) usam 10px entre rótulo e controle, e os 4px daqui
+        // subiam o composto do ENS em relação ao campo E-mail ao lado.
+        <FormItem className={cn('flex flex-col gap-[10px]', fieldWidth)}>
           {/* Sem asterisco, ao contrário do Figma: exigir um nome ENS trancaria
               quem não tem domínio — mesmo argumento do código de indicação
               (§3.5). Asterisco que o formulário não cobra é mentira de UI. */}

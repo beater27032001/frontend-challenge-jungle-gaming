@@ -4,8 +4,10 @@ import { useRef } from 'react'
 import { useForm, useWatch } from 'react-hook-form'
 import { toast } from 'sonner'
 import { z } from 'zod'
+import { Link } from '@tanstack/react-router'
 import { Form } from '@/components/ui/form'
-import type { Profile } from '@/types'
+import { cn, linkFocusRing } from '@/lib/utils'
+import type { Profile, Wallet } from '@/types'
 import {
   AccountPasswordField,
   AccountTextField,
@@ -16,7 +18,12 @@ import {
   accountSubmitClass,
   fieldWidth,
 } from './fields'
-import { applyFieldErrors, useChangePassword, useUpdateProfile } from './mutations'
+import {
+  applyFieldErrors,
+  useChangePassword,
+  useUpdateProfile,
+  useUpdateWallet,
+} from './mutations'
 
 /**
  * Perfil do colecionador (specs/08-perfil-carteiras.md §2, node `70386:239`).
@@ -27,10 +34,16 @@ import { applyFieldErrors, useChangePassword, useUpdateProfile } from './mutatio
  * algo nos campos de senha. Os três campos de senha são obrigatórios entre si
  * (nenhum tem asterisco no Figma, mas trocar senha exige os três).
  *
- * **"Apelido da carteira" não está aqui**: é `Wallet.label`, e o designer o
- * duplicou na tela errada (§2.4). **E-mail é `readOnly`**: o contrato o
- * definiu imutável na fase 1, e um campo editável que a API ignora é mentira
- * de UI.
+ * **"Apelido da carteira" está aqui, sim.** A §2.4 do spec mandava removê-lo
+ * alegando que pertencia à tela de carteiras; o usuário corrigiu — o campo
+ * está desenhado neste frame (linha 3, coluna esquerda) e tem destino real.
+ * Ele edita o `label` da carteira **primária** e salva por
+ * `PATCH /wallets/:id` junto do submit. Sem carteira nenhuma, o campo não
+ * some: renderiza desabilitado, explicando o porquê e apontando para
+ * `/carteiras`.
+ *
+ * **E-mail é `readOnly`**: o contrato o definiu imutável na fase 1, e um
+ * campo editável que a API ignora é mentira de UI.
  */
 
 // 512KB: um avatar é gravado como data URL no db simulado (localStorage), que
@@ -46,6 +59,9 @@ const profileFormSchema = z
       .min(3, 'Informe pelo menos 3 caracteres.')
       .max(24, 'No máximo 24 caracteres.'),
     ensPrefix: z.string().max(60, 'No máximo 60 caracteres.'),
+    // `walletSchema.label` exige `min(1)` no servidor; o formulário cobra o
+    // mesmo antes de mandar, mas só quando existe carteira para editar.
+    walletLabel: z.string(),
     avatarUrl: z.string(),
     currentPassword: z.string(),
     newPassword: z.string(),
@@ -73,9 +89,16 @@ type ProfileFormValues = z.infer<typeof profileFormSchema>
 
 const ENS_SUFFIX = '.eth'
 
-export function ProfileForm({ profile }: { profile: Profile }) {
+export function ProfileForm({
+  profile,
+  primaryWallet,
+}: {
+  profile: Profile
+  primaryWallet: Wallet | null
+}) {
   const updateProfile = useUpdateProfile()
   const changePassword = useChangePassword()
+  const updateWallet = useUpdateWallet()
   const fileRef = useRef<HTMLInputElement>(null)
 
   const form = useForm<ProfileFormValues>({
@@ -84,6 +107,7 @@ export function ProfileForm({ profile }: { profile: Profile }) {
       name: profile.name,
       username: profile.username,
       ensPrefix: profile.ensName.replace(/\.eth$/, ''),
+      walletLabel: primaryWallet?.label ?? '',
       avatarUrl: profile.avatarUrl,
       currentPassword: '',
       newPassword: '',
@@ -107,6 +131,26 @@ export function ProfileForm({ profile }: { profile: Profile }) {
         toast.error('Não foi possível salvar o perfil.')
       }
       return
+    }
+
+    // Apelido da carteira: só vai ao servidor se existe primária E o valor
+    // mudou — um PATCH por submit sem mudança poluiria o toast e o histórico.
+    if (primaryWallet && values.walletLabel !== primaryWallet.label) {
+      if (!values.walletLabel.trim()) {
+        form.setError('walletLabel', { message: 'Informe um apelido.' })
+        return
+      }
+      try {
+        await updateWallet.mutateAsync({
+          id: primaryWallet.id,
+          body: { label: values.walletLabel },
+        })
+      } catch (error) {
+        if (!applyFieldErrors(form, error, 'walletLabel')) {
+          toast.error('Não foi possível salvar o apelido da carteira.')
+        }
+        return
+      }
     }
 
     const changing =
@@ -142,7 +186,7 @@ export function ProfileForm({ profile }: { profile: Profile }) {
     reader.readAsDataURL(file)
   }
 
-  const pending = updateProfile.isPending || changePassword.isPending
+  const pending = updateProfile.isPending || changePassword.isPending || updateWallet.isPending
 
   return (
     <Form {...form}>
@@ -184,9 +228,52 @@ export function ProfileForm({ profile }: { profile: Profile }) {
             <EnsField control={form.control} name="ensPrefix" label="Nome ENS" />
           </FieldRow>
 
-          <div className="flex flex-col gap-[10px]">
-            <PlainLabel>Avatar</PlainLabel>
-            <div className="flex items-center gap-6">
+          {/* Linha 3 do frame `9:1238`: apelido da carteira à ESQUERDA,
+              avatar à direita. Antes o avatar ocupava a linha inteira
+              sozinho e o apelido não existia. */}
+          <FieldRow>
+            {primaryWallet ? (
+              <AccountTextField
+                control={form.control}
+                name="walletLabel"
+                label="Apelido da carteira"
+                required
+              />
+            ) : (
+              // Sem carteira o campo NÃO some: sumiço sem explicação é pior
+              // que desabilitado que se explica.
+              <div className={cn('flex min-w-0 flex-col gap-[10px]', fieldWidth)}>
+                <PlainLabel htmlFor="profile-wallet-label" required>
+                  Apelido da carteira
+                </PlainLabel>
+                <input
+                  id="profile-wallet-label"
+                  disabled
+                  value=""
+                  readOnly
+                  aria-describedby="profile-wallet-label-hint"
+                  className={cn(accountInputClass, 'opacity-50')}
+                />
+                <p id="profile-wallet-label-hint" className="text-caption-12 text-text-secondary">
+                  Cadastre uma carteira em{' '}
+                  <Link
+                    to="/carteiras"
+                    className={cn(linkFocusRing, 'text-text-accent underline')}
+                  >
+                    Carteiras
+                  </Link>{' '}
+                  para dar um apelido a ela.
+                </p>
+              </div>
+            )}
+
+            {/* `min-w-0` + `flex-wrap`: com a linha 3 em duas colunas, o
+                bloco do avatar (50px + botão de 98px + "Remover") tem
+                min-content rígido e, a 768, empurrava a página para 809 de
+                scrollWidth. Medido antes/depois. */}
+            <div className={cn('flex min-w-0 flex-col gap-[10px]', fieldWidth)}>
+              <PlainLabel>Avatar</PlainLabel>
+              <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
               {/* O `p-12` do Figma emoldura o ícone de placeholder; com imagem
                   de verdade ele só encolheria o avatar. */}
               <span
@@ -220,13 +307,14 @@ export function ProfileForm({ profile }: { profile: Profile }) {
               >
                 Remover
               </button>
+              </div>
+              {form.formState.errors.avatarUrl?.message && (
+                <p role="alert" className="text-caption-12 text-destructive">
+                  {form.formState.errors.avatarUrl.message}
+                </p>
+              )}
             </div>
-            {form.formState.errors.avatarUrl?.message && (
-              <p role="alert" className="text-caption-12 text-destructive">
-                {form.formState.errors.avatarUrl.message}
-              </p>
-            )}
-          </div>
+          </FieldRow>
         </div>
 
         <div className="flex flex-col gap-6">

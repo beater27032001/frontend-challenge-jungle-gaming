@@ -302,7 +302,11 @@ test.describe('Breadcrumb e favoritar (critérios 13–14)', () => {
 
     const mercado = nav.getByText('Mercado', { exact: true })
     await expect(mercado).toHaveAttribute('aria-current', 'page')
-    await expect(page.locator('a').filter({ hasText: 'Mercado' })).toHaveCount(0)
+    // Escopado ao breadcrumb, não à página: o header também tem um "Mercado",
+    // e esse É link de propósito. A asserção antiga varria `page.locator('a')`
+    // e quebrou quando o item do menu deixou de ser <span> inerte — locator
+    // amplo acusando defeito onde não há (CLAUDE.md, "Verificação").
+    await expect(nav.locator('a').filter({ hasText: 'Mercado' })).toHaveCount(0)
 
     await inicio.click()
     await expect(page).toHaveURL('/')

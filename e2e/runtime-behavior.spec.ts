@@ -393,7 +393,28 @@ test.describe('Shell — desktop composition (>=1024, spec §2/§9)', () => {
 
     const inicio = header.getByRole('link', { name: 'Início' })
     await expect(inicio).toHaveClass(/text-text-accent/)
-    await expect(inicio).toHaveClass(/underline/)
+    // O item ativo é uma BARRA separada abaixo do item, não `text-decoration:
+    // underline` (que cola um risco na baseline). Medido, não só classe: 2px de
+    // altura, largura do item, em `primary`, abaixo da caixa do texto — e
+    // `text-decoration` tem de estar de volta em `none`.
+    await expect(inicio).toHaveCSS('text-decoration-line', 'none')
+    const bar = await inicio.evaluate((el) => {
+      const span = el.querySelector('span[aria-hidden]')
+      if (!span) return null
+      const b = span.getBoundingClientRect()
+      const a = el.getBoundingClientRect()
+      return {
+        height: b.height,
+        widthDelta: Math.round(b.width - a.width),
+        gapBelowText: Math.round(b.top - a.bottom),
+        bg: getComputedStyle(span).backgroundColor,
+      }
+    })
+    expect(bar).not.toBeNull()
+    expect(bar!.height).toBe(2)
+    expect(bar!.widthDelta).toBe(0)
+    expect(bar!.gapBelowText).toBe(7)
+    expect(bar!.bg).toBe('rgb(210, 138, 76)') // --color-primary #d28a4c
     for (const label of ['Mercado', 'Criadores', 'Aprenda']) {
       await expect(header.getByText(label, { exact: true })).toBeVisible()
     }
@@ -482,8 +503,25 @@ test.describe('Shell — desktop composition (>=1024, spec §2/§9)', () => {
     const enviarRadius = await enviar.evaluate((el) => getComputedStyle(el).borderRadius)
     expect(enviarRadius).toBe('0px 6px 6px 0px')
 
-    // Band 2: brand band with the KURIO wordmark.
+    // Band 2: brand band with the KURIO wordmark. A cor É o requisito aqui
+    // (spec §9: faixa 2 em `surface-dark`, faixas 1 e 3 em `surface-card`) —
+    // asserir só o texto deixaria a faixa se fundir com as vizinhas sem que
+    // nada acusasse. Por isso as quatro cores juntas, na ordem: cada faixa
+    // tem de ser ela mesma E diferente da vizinha.
+    //
+    // A faixa 4 (copyright) é `ink`, o fundo da página: o rodapé termina e
+    // devolve o fundo do site. Ela era um <p> dentro da faixa 3, herdando
+    // `surface-card` — as duas se fundiam, e nada acusava.
     await expect(footer.getByText('KURIO', { exact: true })).toBeVisible()
+    const bandColors = await footer.evaluate((el) =>
+      [...el.children].map((c) => getComputedStyle(c).backgroundColor),
+    )
+    expect(bandColors).toEqual([
+      'rgb(36, 22, 18)', // --color-surface-card #241612
+      'rgb(56, 34, 15)', // --color-surface-dark  #38220f
+      'rgb(36, 22, 18)',
+      'rgb(20, 13, 10)', // --color-ink          #140d0a
+    ])
 
     // Band 3: the four link columns from spec §9.
     for (const title of ['Meu perfil', 'Central de ajuda', 'Coleções', 'Redes sociais']) {
@@ -491,6 +529,46 @@ test.describe('Shell — desktop composition (>=1024, spec §2/§9)', () => {
     }
     await expect(footer.getByText('METAMASK  •  WALLETCONNECT  •  COINBASE')).toBeVisible()
     await expect(footer.getByText('© 2026 Kurio. Propriedade digital para todos.')).toBeVisible()
+  })
+
+  // specs/04-detalhe-nft.md OQ5 (metadata do frame `10:244`): o container
+  // `Top` começa em y=24 e o `Main` em y=77 dentro dele, com o Header Row
+  // ocupando 45 — ou seja, 24 de respiro acima do header e 32 entre header e
+  // conteúdo. Medido no DOM, não lido do CSS: é a distância pintada que o
+  // Figma especifica.
+  test('o header não encosta no topo (24) e o conteúdo não encosta no header (32)', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await boot(page)
+
+    const geo = await page.evaluate(() => {
+      const row = document.querySelector('header')!.firstElementChild!.getBoundingClientRect()
+      const main = document.querySelector('main#main')!
+      const first = main.firstElementChild!.getBoundingClientRect()
+      return { rowTop: row.top, rowBottom: row.bottom, contentTop: first.top }
+    })
+    expect(geo.rowTop).toBe(24)
+    expect(geo.contentTop - geo.rowBottom).toBe(32)
+  })
+
+  // A tira preta no fim da página: com o shell em `block`, `min-h-dvh` estica
+  // o CONTAINER além do conteúdo e a sobra fica abaixo do rodapé, pintada de
+  // `ink`. Só aparece quando o conteúdo é mais curto que a viewport, por isso
+  // 1400 de altura e o carrinho vazio (medido no build antes da correção:
+  // 146px de sobra em /carrinho a 1440x1400; a home, longa, dava 0 e teria
+  // deixado a regressão passar).
+  test('nenhuma faixa pintada sobra abaixo do rodapé em página curta', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 1400 })
+    await page.goto('/carrinho')
+    await awaitMswReady(page)
+    await expect(page.locator('footer')).toBeVisible()
+
+    const strip = await page.evaluate(() => {
+      const f = document.querySelector('footer')!.getBoundingClientRect()
+      return document.documentElement.scrollHeight - (f.bottom + window.scrollY)
+    })
+    expect(strip).toBeLessThanOrEqual(1) // 1px de arredondamento de layout
   })
 })
 
@@ -567,11 +645,30 @@ test.describe('Shell — mobile composition (<1024, spec §10/§11)', () => {
     // state is never color-only (ARCHITECTURE.md decision 4).
     await expect(home.locator('span[aria-hidden]')).toHaveCount(1)
 
-    // Favoritos continua sem tela (fase 4 não ligou): botão desabilitado.
-    const favoritos = page.getByRole('button', { name: 'Favoritos' })
-    await expect(favoritos).toBeDisabled()
+    // Favoritos virou link para a home filtrada (`?fav=true`) — era o único
+    // caminho para os favoritos no mobile e ficou desabilitado desde a fase 4.
+    // Em `/` sem o parâmetro ele NÃO é o ativo: quem acende é Início. As duas
+    // metades juntas, porque a mesma rota serve os dois itens e um teste que
+    // só olhasse um deixaria passar os dois acesos ao mesmo tempo.
+    const favoritos = nav.locator('a[aria-label="Favoritos"]')
+    await expect(favoritos).toHaveCount(1)
     await expect(favoritos).not.toHaveAttribute('aria-current', 'page')
     await expect(favoritos.locator('span[aria-hidden]')).toHaveCount(0)
+
+    // Na visão de favoritos, o item que acende é Favoritos — mas por cor e
+    // ponto, não por `aria-current`. Favoritos é um FILTRO do catálogo
+    // (`/?fav=true`), como `?q=`, e não outra página: `aria-current="page"`
+    // segue no Início, que é onde o usuário de fato está. As duas metades
+    // juntas porque a mesma rota serve os dois itens — um teste que só
+    // olhasse um deixaria passar os dois acesos ao mesmo tempo.
+    await page.goto('/?fav=true')
+    const favAtivo = nav.locator('a[aria-label="Favoritos"]')
+    await expect(favAtivo).toHaveClass(/text-text-accent/)
+    await expect(favAtivo.locator('span[aria-hidden]')).toHaveCount(1)
+    const inicioNaVisaoFav = nav.locator('a[aria-label="Início"]')
+    await expect(inicioNaVisaoFav).not.toHaveClass(/text-text-accent/)
+    await expect(inicioNaVisaoFav.locator('span[aria-hidden]')).toHaveCount(0)
+    await page.goto('/')
 
     // Carrinho (fase 6) e Perfil (fase 8) são links, e em `/` nenhum dos dois
     // é o item ativo: sem `aria-current` e sem o ponto indicador (o badge do
@@ -584,16 +681,45 @@ test.describe('Shell — mobile composition (<1024, spec §10/§11)', () => {
     }
   })
 
-  test('scrolled to the end at 390, the tab bar never covers the last content of <main> (padding-bottom 126px, criterion 18)', async ({
+  test('scrolled to the end at 390, the tab bar never covers the last content of <main> (criterion 18)', async ({
     page,
   }) => {
     await page.setViewportSize({ width: 390, height: 844 })
     await boot(page)
 
-    const paddingBottom = await page
-      .locator('main#main')
-      .evaluate((el) => getComputedStyle(el).paddingBottom)
-    expect(paddingBottom).toBe('126px')
+    // Mede a intenção, não um número mágico. O padding antes era fixado em
+    // '126px' — a altura da tab bar — e o botão flutuante, que sobressai 33px
+    // acima dela, cobria a paginação sem que nada acusasse. O teste agora
+    // pergunta ao DOM qual é o elemento fixo que sobe mais no rodapé e exige
+    // que o padding cubra ATÉ ELE. Assim acompanha mudanças de layout e
+    // continua pegando a regressão real.
+    const { padding, needed } = await page.evaluate(() => {
+      const main = document.querySelector('main#main')!
+      const vh = window.innerHeight
+      const anchored = [...document.body.querySelectorAll('*')].filter((el) => {
+        const st = getComputedStyle(el)
+        if (st.position !== 'fixed' || st.visibility === 'hidden') return false
+        const r = el.getBoundingClientRect()
+        return r.height > 0 && r.bottom > vh - 8 // ancorado no fundo
+      })
+      // Inclui os DESCENDENTES: o botão flutuante é `absolute` dentro da tab
+      // bar fixa e sobressai 32px acima dela. Medir só os elementos `fixed`
+      // dava a altura da barra e ignorava o botão — foi assim que ele passou
+      // a cobrir a paginação sem nada acusar.
+      const topOfBottomChrome = anchored
+        .flatMap((el) => [el, ...el.querySelectorAll('*')])
+        .filter((el) => {
+          const r = el.getBoundingClientRect()
+          return r.height > 0 && r.width > 0 && getComputedStyle(el).visibility !== 'hidden'
+        })
+        .reduce((min, el) => Math.min(min, el.getBoundingClientRect().top), vh)
+      return {
+        padding: Number.parseFloat(getComputedStyle(main).paddingBottom),
+        needed: Math.ceil(vh - topOfBottomChrome),
+      }
+    })
+    expect(needed).toBeGreaterThan(0) // há cromo fixo no rodapé, senão o teste não prova nada
+    expect(padding).toBeGreaterThanOrEqual(needed)
   })
 })
 
@@ -648,6 +774,12 @@ test.describe('Accessibility — keyboard navigation and focus (criterion 24)', 
     await page.keyboard.press('Tab')
     await expect(page.getByRole('link', { name: 'Início' })).toBeFocused()
 
+    // "Mercado" entra na ordem de tabulação: deixou de ser <span> inerte e
+    // virou link para a grade do catálogo. Criadores e Aprenda seguem fora,
+    // porque continuam sem destino — se um dia virarem link, este teste cai.
+    await page.keyboard.press('Tab') // Mercado
+    await expect(page.getByRole('link', { name: 'Mercado' })).toBeFocused()
+
     // Fase 3: o botão de busca do header deixa de ser disabled (busca
     // inline, resolução OQ1) — é o próximo stop, não mais a newsletter do
     // footer (agora precedida por todo o conteúdo real do catálogo). O
@@ -685,9 +817,10 @@ test.describe('Accessibility — keyboard navigation and focus (criterion 24)', 
     // fase 6 e Perfil na fase 8 — os dois são links e ESTÃO na ordem de
     // tabulação, de propósito (o passeio por teclado de cada um fica em
     // e2e/cart.spec.ts e e2e/account.spec.ts).
-    for (const label of ['Favoritos', 'Criar']) {
-      await expect(page.getByRole('button', { name: label })).toBeDisabled()
-    }
+    // "Criar" segue sem consumidor e `disabled` basta para tirá-lo da ordem
+    // de tabulação. Favoritos saiu desta lista: virou link e ESTÁ na ordem,
+    // de propósito — o passeio por teclado fica no teste do item ativo acima.
+    await expect(page.getByRole('button', { name: 'Criar' })).toBeDisabled()
     const tabBar = page.getByRole('navigation', { name: 'Navegação principal' })
     await expect(tabBar.locator('a[href="/carrinho"]')).toBeVisible()
     await expect(tabBar.locator('a[href="/perfil"]')).toBeVisible()
@@ -1279,7 +1412,7 @@ test.describe('Focus ring on plain <Link> does not clip or overlap neighbouring 
       const home = document.activeElement!
       const nav = home.parentElement! // <nav>, items are its direct children
       const idx = Array.from(nav.children).indexOf(home)
-      const next = nav.children[idx + 1] // the disabled "Favoritos" button
+      const next = nav.children[idx + 1] // "Favoritos" (link desde a integração)
       return {
         homeRect: home.getBoundingClientRect().toJSON(),
         nextRect: next.getBoundingClientRect().toJSON(),
@@ -1401,6 +1534,11 @@ test.describe('Full breakpoint round-trip (fix iteration 1 regression): 1440 -> 
     await expect(page.getByRole('link', { name: 'KURIO' }).first()).toBeFocused()
     await page.keyboard.press('Tab') // Início
     await expect(page.getByRole('link', { name: 'Início' })).toBeFocused()
+    // "Mercado" entra na ordem de tabulação: deixou de ser <span> inerte e
+    // virou link para a grade do catálogo. Criadores e Aprenda seguem fora,
+    // porque continuam sem destino — se um dia virarem link, este teste cai.
+    await page.keyboard.press('Tab') // Mercado
+    await expect(page.getByRole('link', { name: 'Mercado' })).toBeFocused()
     // Fase 3: o botão de busca do header não é mais disabled (busca inline).
     await page.keyboard.press('Tab')
     await expect(page.getByRole('button', { name: 'Buscar' })).toBeFocused()

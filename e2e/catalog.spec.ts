@@ -415,6 +415,11 @@ test.describe('Navigation and shell', () => {
     await expect(page.getByRole('link', { name: 'KURIO' })).toBeFocused()
     await page.keyboard.press('Tab') // Início
     await expect(page.getByRole('link', { name: 'Início' })).toBeFocused()
+    // "Mercado" entra na ordem de tabulação: deixou de ser <span> inerte e
+    // virou link para a grade do catálogo. Criadores e Aprenda seguem fora,
+    // porque continuam sem destino — se um dia virarem link, este teste cai.
+    await page.keyboard.press('Tab') // Mercado
+    await expect(page.getByRole('link', { name: 'Mercado' })).toBeFocused()
     await page.keyboard.press('Tab') // Buscar
     await expect(page.getByRole('button', { name: 'Buscar' })).toBeFocused()
 

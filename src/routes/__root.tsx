@@ -60,8 +60,13 @@ function RootLayout() {
   // escopo do usuário. Ver src/features/realtime/use-realtime.ts.
   useRealtime()
 
+  // `min-h-dvh` sozinho esticava ESTE div além do conteúdo em página curta
+  // (/login media 715 de conteúdo em viewport de 900): os 185px sobrando ficavam
+  // ABAIXO do footer pintados de `ink`, que é a tira preta no fim da página.
+  // Coluna flex com o `main` crescendo empurra o footer para a base — o espaço
+  // sobrando passa a ser do main, e nada sobra depois do rodapé.
   return (
-    <div className="min-h-dvh bg-background text-foreground">
+    <div className="flex min-h-dvh flex-col bg-background text-foreground">
       <a
         href="#main"
         className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-primary focus:px-4 focus:py-2 focus:text-primary-foreground"
@@ -75,16 +80,34 @@ function RootLayout() {
           com composição própria paga o fundo que ela mesma ocupa: /carrinho
           a folha de 342px, /nft/* a Buy Bar de 164px, e /login e /cadastro
           nada, porque não têm barra no fundo. */}
+      {/* lg:pt-8 — no frame desktop o `Main` começa 32px abaixo do Header Row
+          (specs/04-detalhe-nft.md OQ5: Top y=24, Header Row 45, Main y=77).
+          /nft/*, /carrinho e /pagamento já pagam esse respiro no `py-8` da
+          própria coluna; somar aqui daria 64. */}
       <main
         id="main"
         className={cn(
-          isCart ? 'pb-[358px]' : isNftDetail ? 'pb-[164px]' : isAuthRoute || isCheckout ? 'pb-0' : 'pb-[126px]',
+          'flex-1',
+          isCart
+            ? 'pb-[358px]'
+            : isNftDetail
+              ? 'pb-[166px]' // Buy Bar mede 166, não 164 — medido no DOM
+              : isAuthRoute || isCheckout
+                ? 'pb-0'
+                : 'pb-[159px]', // TabBar 126 + o overhang de 33 do botão flutuante
           'lg:pb-0',
+          !(isNftDetail || isCart || isCheckout) && 'lg:pt-8',
         )}
       >
         <Outlet />
       </main>
-      <Footer />
+      {/* Sem rodapé em /perfil e /carteiras: os frames `9:1238` e `9:1670` têm
+          1080px exatos e acabam logo depois do formulário, enquanto todo outro
+          frame desktop vai de 1657 a 3668px. A ausência é recorte de viewport no
+          Figma; seguir o recorte mesmo assim foi decisão do usuário. O Header
+          fica (o Figma o desenha nas duas) e a TabBar mobile também, que é por
+          onde se chega ao perfil. */}
+      {!isAccount && <Footer />}
       {!isBareMobile && <TabBar />}
       <Toaster theme="dark" />
     </div>
