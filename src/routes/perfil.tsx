@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { AccountShell } from '@/components/account-sidebar'
 import { Skeleton } from '@/components/ui/skeleton'
-import { profileOptions, useAccountScope } from '@/features/account/queries'
+import { profileOptions, useAccountScope, walletsOptions } from '@/features/account/queries'
 import { ProfileForm } from '@/features/account/profile-form'
 import { sessionOptions } from '@/features/auth/use-session'
 import { apiErrorOf } from '@/lib/api'
@@ -23,10 +23,15 @@ export const Route = createFileRoute('/perfil')({
 function PerfilPage() {
   const { scope, ready } = useAccountScope()
   const profile = useQuery({ ...profileOptions(scope), enabled: ready })
+  // "Apelido da carteira" (linha 3 do frame `9:1238`) edita o `label` da
+  // carteira primária, então o formulário só nasce depois que as carteiras
+  // chegam — `defaultValues` do react-hook-form é lido uma vez, no mount.
+  const wallets = useQuery({ ...walletsOptions(scope), enabled: ready })
+  const primaryWallet = wallets.data?.find((w) => w.role === 'primary') ?? null
 
   return (
     <AccountShell title="Perfil do colecionador">
-      {profile.isPending || !ready ? (
+      {profile.isPending || wallets.isPending || !ready ? (
         <div className="flex flex-col gap-6">
           <Skeleton className="h-5 w-56" />
           {Array.from({ length: 5 }, (_, i) => (
@@ -40,7 +45,11 @@ function PerfilPage() {
       ) : (
         // `key` garante que o formulário renasça com os valores do usuário
         // corrente: trocar de usuário não pode deixar rascunho do anterior.
-        <ProfileForm key={profile.data.id} profile={profile.data} />
+        <ProfileForm
+          key={`${profile.data.id}:${primaryWallet?.id ?? 'none'}`}
+          profile={profile.data}
+          primaryWallet={primaryWallet}
+        />
       )}
     </AccountShell>
   )
