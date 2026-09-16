@@ -44,6 +44,10 @@ function RootLayout() {
   const isAuthRoute = pathname === '/login' || pathname === '/cadastro'
   const isCart = pathname === '/carrinho'
   const isBareMobile = isNftDetail || isAuthRoute || isCart
+  // Fase 8: /perfil e /carteiras trazem Screen Header próprio (spec 08 §5.3),
+  // então a MobileSearchBar sairia duplicada — mas a TabBar FICA: é por ela que
+  // se chega ao perfil, e estas telas não ocupam o fundo com folha nenhuma.
+  const isAccount = pathname === '/perfil' || pathname === '/carteiras'
 
   // Fase 9: uma única conexão Socket.IO para o app inteiro, atrelada ao
   // escopo do usuário. Ver src/features/realtime/use-realtime.ts.
@@ -58,7 +62,7 @@ function RootLayout() {
         Pular para o conteúdo
       </a>
       <Header withDivider={!isNftDetail} />
-      {!isBareMobile && <MobileSearchBar />}
+      {!isBareMobile && !isAccount && <MobileSearchBar />}
       {/* pb-[126px] evita que a TabBar fixa encubra o fim do conteúdo em
           telas < lg (critério 18); some em lg, onde não há TabBar. Cada rota
           com composição própria paga o fundo que ela mesma ocupa: /carrinho

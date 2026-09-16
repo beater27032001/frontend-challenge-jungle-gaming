@@ -11,6 +11,7 @@ import { cn, linkFocusRing } from '@/lib/utils'
 export function TabBar() {
   const pathname = useLocation({ select: (l) => l.pathname })
   const isHomeActive = pathname === '/'
+  const isProfileActive = pathname === '/perfil' || pathname === '/carteiras'
   const cartCount = useCartCount()
 
   return (
@@ -79,14 +80,22 @@ export function TabBar() {
             </span>
           )}
         </Link>
-        <button
-          type="button"
-          disabled // fase 8 liga isto
+        {/* Fase 8: rota real. `/perfil` é privada — sem sessão o `beforeLoad`
+            redireciona para o login com `redirect=/perfil`, então o visitante
+            não cai em tela vazia nem em 404. */}
+        <Link
+          to="/perfil"
           aria-label="Perfil"
-          className="flex flex-col items-center gap-1 text-text-secondary"
+          aria-current={isProfileActive ? 'page' : undefined}
+          className={cn(
+            linkFocusRing,
+            'flex flex-col items-center gap-1 text-text-secondary',
+            isProfileActive && 'text-text-accent',
+          )}
         >
           <User className="size-5" />
-        </button>
+          {isProfileActive && <span aria-hidden className="size-1 rounded-full bg-current" />}
+        </Link>
       </nav>
     </div>
   )
