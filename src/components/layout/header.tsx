@@ -19,7 +19,9 @@ import { cn, linkFocusRing } from '@/lib/utils'
 // fluxo de mercado (specs/02-design-system.md §2) mesmo sem Link próprio.
 function activeNavLabel(pathname: string): 'Início' | 'Mercado' | null {
   if (pathname === '/') return 'Início'
-  if (pathname.startsWith('/nft')) return 'Mercado'
+  // Fase 7: o spec 07 §2 desenha o header do Pagamento com "Mercado" ativo — o
+  // checkout é a ponta do fluxo de mercado, não uma seção própria.
+  if (pathname.startsWith('/nft') || pathname === '/pagamento') return 'Mercado'
   return null
 }
 

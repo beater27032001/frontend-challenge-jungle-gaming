@@ -929,7 +929,7 @@ test.describe('Fix Plan (iteration 2): NftSummary derived fields stay coherent',
     return item
   }
 
-  test('seed remains unchanged: fresh reset top-level fields match the known fixture values, SEED_VERSION is 5', async ({
+  test('seed remains unchanged: fresh reset top-level fields match the known fixture values, SEED_VERSION is 6', async ({
     page,
   }) => {
     await bootReset(page)
@@ -952,7 +952,14 @@ test.describe('Fix Plan (iteration 2): NftSummary derived fields stay coherent',
     // opção A): bumps once more to 5 — `editions[].label` passa a ser
     // gerado de `totalSupply` (`1/{totalSupply}`/`ABERTA`) em vez do nome
     // fantasia "Standard"/"Deluxe" (ARCHITECTURE.md fase 4 decisão 17).
-    expect(dbDump.seedVersion).toBe(5)
+    // Fase 7: sobe para 6 — `QuoteItem` (e portanto `Order.items`, o recibo)
+    // ganha `imageUrl`, para que o snapshot do pedido carregue a arte em vez de
+    // a tela derivar a URL do catálogo (ARCHITECTURE.md fase 7 decisão 46).
+    // Atualizado, não deletado — mesmo precedente das fases 2, 3 e 4.
+    expect(dbDump.seedVersion).toBe(6)
+    // E o item do pedido semeado carrega a arte, provando que o snapshot é
+    // autossuficiente.
+    expect(dbDump.orders[0].items[0].imageUrl).toBeTruthy()
   })
 
   test('sold-out: top-level `available` (not just editions[0]) drops to 0 on both detail and list, and never contradicts editions', async ({
