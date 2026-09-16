@@ -3,6 +3,7 @@ import { createFileRoute, Link } from '@tanstack/react-router'
 import { useSession } from '@/features/auth/use-session'
 import { CatalogGrid } from '@/features/nft/components/catalog-grid'
 import { CatalogPagination } from '@/features/nft/components/catalog-pagination'
+import { HomeEditorial } from '@/features/nft/components/home-editorial'
 import { CatalogToolbar } from '@/features/nft/components/catalog-toolbar'
 import { FeaturedBanner } from '@/features/nft/components/featured-banner'
 import { FilterPanel } from '@/features/nft/components/filter-panel'
@@ -104,16 +105,26 @@ function HomePage() {
           {/* mb-14 (56px) até a seção seguinte: a paginação encostava no
               rodapé (medido 0px). 56 é o passo vertical que o próprio grid
               usa (specs/03-catalogo.md §3, `gap-y-[56px]`) — a régua da
-              página, não um número novo. O ALINHAMENTO continua à esquerda
-              da coluna do grid: §5 transcreve tamanho, raio e gap dos botões
-              e não diz alinhamento, e inventar um seria pior. Ver relatório. */}
+              página, não um número novo.
+              Alinhada à DIREITA da coluna do grid, conferido pelo usuário no
+              Figma: a §5 transcreve tamanho, raio e gap dos botões e omite o
+              alinhamento, e a leitura por medição tinha ficado à esquerda. */}
           {!isFavView && (
-            <div className="mb-14">
+            <div className="mb-14 flex justify-end">
               <CatalogPagination page={params.page ?? 1} totalPages={list.data?.totalPages ?? 1} />
             </div>
           )}
         </div>
       </div>
+
+      {/* Cards promocionais e "Diário da Cunhagem" (specs/03-catalogo.md §7).
+          Ficam FORA da coluna do grid, largura total do conteúdo, como no
+          Figma. Só na visão do catálogo: na de favoritos seriam ruído. */}
+      {!isFavView && (
+        <div className="mt-14 pb-14">
+          <HomeEditorial />
+        </div>
+      )}
     </div>
   )
 }
