@@ -713,6 +713,56 @@ mesma linha `Killed: 9`. Toda spec que falha nessas rodadas passa em isolamento.
 Como evitar: `--workers=1` (o que o CI já faz), e nunca duas suítes ao mesmo
 tempo na mesma máquina.
 
+**Ocorrência nova (fases 10/11), terceira família.** Numa de duas rodadas
+completas com `--workers=1` (564 testes), `runtime-behavior.spec.ts:539` — "o
+header não encosta no topo (24)" — falhou com `page.evaluate: TypeError: Cannot
+read properties of null (reading 'firstElementChild')`. O `document
+.querySelector('header')` voltou `null`: `boot()` resolve quando os mocks
+respondem, não quando o React montou o header, e o `page.evaluate` seguinte não
+tem espera nenhuma entre os dois. Em isolamento passou 10/10; na segunda rodada
+completa passou. Taxa observada: 1 em 1112 execuções (2 rodadas × 556). Não é o
+`Killed: 9` (o servidor ficou de pé) nem a tolerância do `slow`. O conserto é o
+mesmo padrão de `pressFirstTab`: trocar a suposição por espera explícita
+(`await expect(page.locator('header > *').first()).toBeVisible()` antes do
+`evaluate`). Registrado, não corrigido — está fora do escopo das fases 10/11.
+
+## Fases 10 e 11 — Regressão visual e Lighthouse
+
+30. **`snapshotPathTemplate` sem `{projectName}` é uma armadilha silenciosa.** O
+    template vem da fase 2 como `{testDir}/__screenshots__/{testFilePath}/{arg}
+    {ext}`. Com nome auto-gerado, desktop e mobile gravariam no MESMO arquivo e
+    um sobrescreveria o outro sem erro nenhum — a suíte ficaria verde comparando
+    mobile contra baseline de desktop. `e2e/visual.spec.ts` passa nome explícito
+    com `test.info().project.name` dentro em vez de mexer no config.
+
+31. **`maxDiffPixelRatio: 0.01` é frouxo demais para print `fullPage`.** Medido,
+    não suposto: trocar `--color-primary` inteiro deixou 9 das 14 baselines
+    passarem, porque 1% de uma imagem 1440×3943 são ~57 mil pixels. O spec
+    aperta para `maxDiffPixels: 200` por chamada (o Playwright aplica o mais
+    estrito dos dois). Com isso, 12 das 14 acusam.
+
+32. **As 2 que continuam não acusando expõem um furo de token, não do gate.**
+    Carrinho e pagamento no mobile passam a mutação porque o CTA fixa `#d28a4c`
+    num gradiente inline. Cinco pontos fazem isso: `cart-mobile.tsx` (×2),
+    `checkout-mobile.tsx`, `nft-detail-mobile.tsx` e `account/fields.tsx`.
+    Trocar por `var(--color-primary)` fecharia o ponto cego — dívida aberta.
+
+33. **Determinismo veio de esperar estado, nunca tempo.** `settle()` espera
+    mocks → socket → zero `[data-slot="skeleton"]` → zero `[aria-busy="true"]` →
+    imagens `complete` e `decode()` → `document.fonts.ready`. O `aria-busy` foi
+    achado na prática: a primeira geração congelou o carrinho com "—" no lugar
+    do total, e `toHaveScreenshot` **não** acusou, porque dois quadros
+    consecutivos no estado pendente são idênticos entre si. Espera de
+    estabilidade não substitui espera de estado.
+
+34. **Lighthouse roda contra o build, e `/perfil` exige sessão.** `pnpm
+    lighthouse` faz `pnpm build` + `pnpm preview` na 4173. Anônimo, `/perfil`
+    redireciona para `/login` e a auditoria mediria a tela errada; então
+    `scripts/lh-seed.mjs` semeia um perfil do Chrome com a sessão da ANA (cookie
+    `gm_session` + `db.sessions` no localStorage) e o run usa
+    `--disable-storage-reset`. Esse flag também impede a limpeza de cache: o run
+    de `/perfil` sai com cache quente e não é comparável com os outros.
+
 ## Fase 9 — Tempo real com Socket.IO
 
 Decisões e limitações do §7 do desafio e do transporte do §6.
