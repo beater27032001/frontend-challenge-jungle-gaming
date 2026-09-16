@@ -327,15 +327,19 @@ parâmetros da consulta. Nenhum dado fictício vive fora de `src/mocks/`.
 
 Registro honesto; o detalhamento de cada decisão está em `ARCHITECTURE.md`.
 
-- **Flake residual na suíte E2E.** `pnpm test` roda 564 testes (desktop + mobile) e passa em
-  cerca de **3 de cada 4 rodadas completas** sob paralelismo padrão. O que resta é
-  **infraestrutura de teste, não código de aplicação**: a fonte conhecida é uma tolerância de
-  tempo de parede em `e2e/runtime-behavior.spec.ts:118` (assere que o cenário `slow` demora
-  ~2500 ms com teto de 3500 ms), apertada quando a máquina está sob carga. Com
-  `pnpm test -- --workers=1` a suíte passa de forma consistente. Três famílias de flake
-  anteriores foram diagnosticadas e corrigidas na causa raiz (itens 20 a 22 do
-  `ARCHITECTURE.md`); esta não foi perseguida até 100% por decisão de prazo — o conserto é
-  asserir só o piso da latência.
+- **Rode a suíte com `--workers=1`.** São **564 testes** (desktop 1440 + mobile 390), e a
+  última rodada completa deu **556 passed · 8 skipped · 0 failed**. Os 8 pulados são
+  específicos de um breakpoint — geometria que só existe no frame mobile, por exemplo.
+
+  Com paralelismo alto em máquina carregada, o `vite preview` é morto por pressão de memória
+  (`Killed: 9`) e **todo** teste falha em seguida com `net::ERR_CONNECTION_REFUSED`. Isso não
+  é flake de teste nem regressão: é o servidor morrendo. Provado por controle — a mesma
+  revisão, sem alteração nenhuma, colapsou de 380/380 para 79/301 com a máquina sob carga.
+
+  O flake residual conhecido é **1 falha em 1112 execuções** (`runtime-behavior.spec.ts:539`,
+  só em desktop): `boot()` resolve quando o MSW responde, não quando o React montou o header.
+  Caracterizado, não perseguido. Detalhes em `ARCHITECTURE.md`, "Limitação conhecida".
+
 - **Regressão visual: 14 baselines, e dois pontos cegos conhecidos.** `e2e/visual.spec.ts`
   cobre início, detalhe, login, carrinho, pagamento, perfil e carteiras em 1440 e 390. O gate
   foi provado por mutação (trocar `--color-primary` de `#d28a4c` para `#4c8ad2`): **12 das 14
@@ -348,9 +352,19 @@ Registro honesto; o detalhamento de cada decisão está em `ARCHITECTURE.md`.
   backend. Mobile fica na casa dos **80** por causa disso; desktop, 95–99. O run de `/perfil`
   usa perfil semeado + `--disable-storage-reset` (sessão exige cookie), o que também deixa o
   cache quente: não é comparável com os outros.
+
 - **Antes de cada rodada de `pnpm test`, mate processos na porta 4173.** `vite preview`
   esquecido de rodadas anteriores contamina a medição: já produziu 25 falhas espúrias em
   arquivos não relacionados.
+- **As seções do fim da home foram medidas por captura, não extraídas.** Os cards
+  promocionais e o "Diário da Cunhagem" foram construídos a partir de captura de tela do
+  Figma, porque a cota do MCP de design estourou. Proporções e escala seguem a régua do
+  catálogo (gap 56, raio 14, arte quadrada). Nada ali finge navegar: "Explorar" leva ao
+  catálogo e "Ler mais" é texto inerte, não link.
+- **Cinco defeitos visuais da entrega vieram de lacunas na transcrição do Figma**, não de erro
+  de implementação — alinhamento, cor de texto e uma seção inteira que o spec mandava omitir.
+  O padrão e o que aprender com ele estão em `ARCHITECTURE.md`, "O que a transcrição do Figma
+  errou".
 - **Desvios do Figma e placeholders.** Vários itens de extração fina (offsets, um gradiente de
   hero aproximado em CSS, ícones de marca substituídos por glifos genéricos do lucide v1,
   e-mail/telefone do footer) estão listados um a um no `ARCHITECTURE.md`. O tema é

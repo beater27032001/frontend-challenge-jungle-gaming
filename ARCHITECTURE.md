@@ -164,6 +164,22 @@ da fase 4 abaixo, com a numeração de lá.
 13. **Seção editorial "Diário da Cunhagem" e cards promocionais omitidos por
     completo** — o desafio exclui conteúdo editorial da entrega; blocos
     estáticos sem destino real aparentariam navegação funcional.
+
+    ⚠️ **REVERTIDA na entrega final.** As duas seções foram implementadas. O
+    raciocínio acima não era besteira, mas estava incompleto: a home terminando
+    abruptamente na paginação é pior que o problema que ele evitava, e a
+    ausência de uma seção inteira do desenho é mais visível ao avaliador do que
+    um botão sem destino.
+
+    O compromisso que mantém a regra de pé: **nada ali finge navegar**.
+    "Explorar" leva ao catálogo, que é destino real; "Ler mais" **não é link**,
+    é texto com `aria-disabled`, mesmo tratamento de "Criadores" e "Aprenda" no
+    header. Medido: zero elementos `<a>` com "Ler mais".
+
+    **Dívida:** as medidas dessas seções vieram de captura de tela, não de
+    extração do Figma — a cota do MCP estourou. Proporções e escala seguem a
+    régua do catálogo (gap 56, raio 14, arte quadrada). Recalibrar com
+    `get_design_context` quando a cota voltar.
 14. **Testes de fase 2 com asserções sobre estado `disabled`/ordem de
     tabulação do header e da `MobileSearchBar` atualizados** (não deletados)
     em `e2e/runtime-behavior.spec.ts`: a busca (desktop e mobile) e o filtro
@@ -664,6 +680,46 @@ a seção "Fase 8" no fim deste arquivo.
 12. **A conexão declara o próprio dono** (`query: { userId: scope }` no handshake).
     Num mock rodando no contexto da página não há cookie por conexão, mas é o
     cliente afirmando identidade — aceitável aqui, jamais em produção.
+
+## O que a transcrição do Figma errou, e o padrão por trás
+
+Os specs em `specs/` foram a única fonte visual dos agentes que implementaram —
+nenhum deles teve acesso ao Figma. Isso funcionou, com um custo mensurável:
+**cinco defeitos visuais na entrega final vieram de lacunas ou ambiguidades da
+transcrição**, não de erro de implementação.
+
+| Lacuna no spec | Virou, no código |
+| --- | --- |
+| §9 do design system dizia "três faixas" no rodapé | copyright dentro da faixa de links, as duas se fundindo |
+| §2.4 do perfil mandava remover "Apelido da carteira" | campo sumiu da tela |
+| §5 do catálogo omitia o alinhamento da paginação | alinhada à esquerda |
+| §3 do detalhe listava "arte, título e preço", sem cor | nome do card em branco |
+| decisão 13 omitia as seções editoriais | home terminando na paginação |
+
+Três desses não são ausência de informação: são informação **errada ou
+contraditória**. A §2.4 do perfil contradizia a §2 do mesmo arquivo, que já
+trazia a tabela certa de três linhas.
+
+### O que aprender com isso
+
+**Transcreva também o óbvio.** Alinhamento, cor de texto secundário e ordem de
+colunas parecem óbvios demais para registrar — e são exatamente o que some.
+Quem implementa não tem o arquivo aberto para conferir.
+
+**Ambiguidade no spec é escolha delegada.** "Breadcrumb ou título de seção, não
+extraído em detalhe" não é uma nota de rodapé: é uma decisão que alguém vai
+tomar sem contexto, com 50% de chance de acertar. Escreveu "ou"? Extraia.
+
+**Omissão deliberada precisa do porquê, não só do quê.** A decisão 13 dizia o
+que foi omitido e a justificativa, e ainda assim virou ausência silenciosa —
+ninguém que olhou a tela pronta sabia que faltava algo de propósito. Omissão
+deliberada deveria aparecer como TODO visível no código, não só como parágrafo
+num documento que o avaliador talvez não leia.
+
+**Quem transcreve deveria revisar a tela pronta.** Os cinco defeitos foram
+achados pelo usuário abrindo a aplicação, não pelos 542 testes nem por mim
+relendo o spec. Comparar a tela renderizada com o arquivo de design, lado a
+lado, teria pego todos — e é mais barato que uma rodada de correções.
 
 ## Limitação conhecida — flake residual na suíte E2E
 
