@@ -256,7 +256,9 @@ export function AccountPasswordField<T extends FieldValues>({
               aria-pressed={visible}
               aria-label={visible ? 'Ocultar senha' : 'Mostrar senha'}
               onClick={() => setVisible((v) => !v)}
-              className="absolute right-4 top-1/2 flex size-5 -translate-y-1/2 items-center justify-center text-text-secondary outline-none focus-visible:ring-[3px] focus-visible:ring-ring/75"
+              // Alvo de toque de 24px (WCAG 2.5.8): a caixa clicável cresce,
+              // o ícone de 20px continua igual.
+              className="absolute right-4 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center text-text-secondary outline-none focus-visible:ring-[3px] focus-visible:ring-ring/75"
             >
               {visible ? <EyeOff aria-hidden className="size-5" /> : <Eye aria-hidden className="size-5" />}
             </button>
@@ -286,4 +288,4 @@ export function FieldRow({
 /** CTA: `131×40` raio 3 no desktop; no mobile o padrão dos frames existentes
  * (largura total, `h-60`, raio 40, gradiente) — §5.4. */
 export const accountSubmitClass =
-  'h-[60px] w-full rounded-[40px] bg-[linear-gradient(108.5deg,#d28a4c_0%,rgba(210,138,76,0.8)_100%)] text-body-16 font-bold text-ink outline-none focus-visible:ring-[3px] focus-visible:ring-ring/75 disabled:opacity-50 md:h-10 md:w-[131px] md:rounded-[3px] md:bg-primary md:bg-none md:text-body-14'
+  'h-[60px] w-full rounded-[40px] bg-[linear-gradient(108.5deg,var(--color-primary)_0%,color-mix(in_srgb,var(--color-primary)_80%,transparent)_100%)] text-body-16 font-bold text-ink outline-none focus-visible:ring-[3px] focus-visible:ring-ring/75 disabled:opacity-50 md:h-10 md:w-[131px] md:rounded-[3px] md:bg-primary md:bg-none md:text-body-14'
