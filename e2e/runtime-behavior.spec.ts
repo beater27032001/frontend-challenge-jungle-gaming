@@ -393,7 +393,28 @@ test.describe('Shell — desktop composition (>=1024, spec §2/§9)', () => {
 
     const inicio = header.getByRole('link', { name: 'Início' })
     await expect(inicio).toHaveClass(/text-text-accent/)
-    await expect(inicio).toHaveClass(/underline/)
+    // O item ativo é uma BARRA separada abaixo do item, não `text-decoration:
+    // underline` (que cola um risco na baseline). Medido, não só classe: 2px de
+    // altura, largura do item, em `primary`, abaixo da caixa do texto — e
+    // `text-decoration` tem de estar de volta em `none`.
+    await expect(inicio).toHaveCSS('text-decoration-line', 'none')
+    const bar = await inicio.evaluate((el) => {
+      const span = el.querySelector('span[aria-hidden]')
+      if (!span) return null
+      const b = span.getBoundingClientRect()
+      const a = el.getBoundingClientRect()
+      return {
+        height: b.height,
+        widthDelta: Math.round(b.width - a.width),
+        gapBelowText: Math.round(b.top - a.bottom),
+        bg: getComputedStyle(span).backgroundColor,
+      }
+    })
+    expect(bar).not.toBeNull()
+    expect(bar!.height).toBe(2)
+    expect(bar!.widthDelta).toBe(0)
+    expect(bar!.gapBelowText).toBe(7)
+    expect(bar!.bg).toBe('rgb(210, 138, 76)') // --color-primary #d28a4c
     for (const label of ['Mercado', 'Criadores', 'Aprenda']) {
       await expect(header.getByText(label, { exact: true })).toBeVisible()
     }
@@ -482,8 +503,25 @@ test.describe('Shell — desktop composition (>=1024, spec §2/§9)', () => {
     const enviarRadius = await enviar.evaluate((el) => getComputedStyle(el).borderRadius)
     expect(enviarRadius).toBe('0px 6px 6px 0px')
 
-    // Band 2: brand band with the KURIO wordmark.
+    // Band 2: brand band with the KURIO wordmark. A cor É o requisito aqui
+    // (spec §9: faixa 2 em `surface-dark`, faixas 1 e 3 em `surface-card`) —
+    // asserir só o texto deixaria a faixa se fundir com as vizinhas sem que
+    // nada acusasse. Por isso as quatro cores juntas, na ordem: cada faixa
+    // tem de ser ela mesma E diferente da vizinha.
+    //
+    // A faixa 4 (copyright) é `ink`, o fundo da página: o rodapé termina e
+    // devolve o fundo do site. Ela era um <p> dentro da faixa 3, herdando
+    // `surface-card` — as duas se fundiam, e nada acusava.
     await expect(footer.getByText('KURIO', { exact: true })).toBeVisible()
+    const bandColors = await footer.evaluate((el) =>
+      [...el.children].map((c) => getComputedStyle(c).backgroundColor),
+    )
+    expect(bandColors).toEqual([
+      'rgb(36, 22, 18)', // --color-surface-card #241612
+      'rgb(56, 34, 15)', // --color-surface-dark  #38220f
+      'rgb(36, 22, 18)',
+      'rgb(20, 13, 10)', // --color-ink          #140d0a
+    ])
 
     // Band 3: the four link columns from spec §9.
     for (const title of ['Meu perfil', 'Central de ajuda', 'Coleções', 'Redes sociais']) {
@@ -491,6 +529,46 @@ test.describe('Shell — desktop composition (>=1024, spec §2/§9)', () => {
     }
     await expect(footer.getByText('METAMASK  •  WALLETCONNECT  •  COINBASE')).toBeVisible()
     await expect(footer.getByText('© 2026 Kurio. Propriedade digital para todos.')).toBeVisible()
+  })
+
+  // specs/04-detalhe-nft.md OQ5 (metadata do frame `10:244`): o container
+  // `Top` começa em y=24 e o `Main` em y=77 dentro dele, com o Header Row
+  // ocupando 45 — ou seja, 24 de respiro acima do header e 32 entre header e
+  // conteúdo. Medido no DOM, não lido do CSS: é a distância pintada que o
+  // Figma especifica.
+  test('o header não encosta no topo (24) e o conteúdo não encosta no header (32)', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await boot(page)
+
+    const geo = await page.evaluate(() => {
+      const row = document.querySelector('header')!.firstElementChild!.getBoundingClientRect()
+      const main = document.querySelector('main#main')!
+      const first = main.firstElementChild!.getBoundingClientRect()
+      return { rowTop: row.top, rowBottom: row.bottom, contentTop: first.top }
+    })
+    expect(geo.rowTop).toBe(24)
+    expect(geo.contentTop - geo.rowBottom).toBe(32)
+  })
+
+  // A tira preta no fim da página: com o shell em `block`, `min-h-dvh` estica
+  // o CONTAINER além do conteúdo e a sobra fica abaixo do rodapé, pintada de
+  // `ink`. Só aparece quando o conteúdo é mais curto que a viewport, por isso
+  // 1400 de altura e o carrinho vazio (medido no build antes da correção:
+  // 146px de sobra em /carrinho a 1440x1400; a home, longa, dava 0 e teria
+  // deixado a regressão passar).
+  test('nenhuma faixa pintada sobra abaixo do rodapé em página curta', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 1400 })
+    await page.goto('/carrinho')
+    await awaitMswReady(page)
+    await expect(page.locator('footer')).toBeVisible()
+
+    const strip = await page.evaluate(() => {
+      const f = document.querySelector('footer')!.getBoundingClientRect()
+      return document.documentElement.scrollHeight - (f.bottom + window.scrollY)
+    })
+    expect(strip).toBeLessThanOrEqual(1) // 1px de arredondamento de layout
   })
 })
 

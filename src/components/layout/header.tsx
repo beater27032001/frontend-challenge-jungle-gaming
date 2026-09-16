@@ -25,6 +25,22 @@ function activeNavLabel(pathname: string): 'Início' | 'Mercado' | null {
   return null
 }
 
+// `leading-[16px]` iguala a caixa de linha ao glifo de 16px, como em toda a
+// escala do Figma — é o que ancora a barra do item ativo a uma distância
+// previsível do texto, em vez de a uma entrelinha herdada do body.
+const NAV_ITEM = 'relative text-body-16 leading-[16px]'
+
+/**
+ * Item ativo da nav: no Figma é uma BARRA separada abaixo do item, não
+ * `text-decoration: underline` (que cola um risco na baseline). Mesma
+ * construção já usada nas abas do catálogo (`catalog-toolbar.tsx`, de
+ * specs/03-catalogo.md §2: barra de 2px em `primary`, 7px abaixo da caixa de
+ * 16px do texto) — a única geometria de sublinhado ativo que os specs medem.
+ */
+function ActiveBar() {
+  return <span aria-hidden className="absolute top-full left-0 mt-[7px] h-[2px] w-full bg-primary" />
+}
+
 export function Header({ withDivider = true }: { withDivider?: boolean }) {
   const pathname = useLocation({ select: (l) => l.pathname })
   const active = activeNavLabel(pathname)
@@ -62,7 +78,10 @@ export function Header({ withDivider = true }: { withDivider?: boolean }) {
   }
 
   return (
-    <header className="hidden lg:block">
+    // pt-6: o container `Top` do frame desktop começa em y=24 (specs/04-detalhe-nft.md
+    // OQ5) — o header nunca encosta no topo do frame. O respiro é do shell, por isso
+    // mora aqui e não em cada rota.
+    <header className="hidden pt-6 lg:block">
       {/* A régua acompanha a coluna de 1200 (Figma 70522:3240), não sangra a
           largura toda da viewport. */}
       <div
@@ -86,11 +105,12 @@ export function Header({ withDivider = true }: { withDivider?: boolean }) {
             aria-current={active === 'Início' ? 'page' : undefined}
             className={cn(
               linkFocusRing,
-              'text-body-16',
-              active === 'Início' ? 'text-text-accent underline' : 'text-foreground',
+              NAV_ITEM,
+              active === 'Início' ? 'text-text-accent' : 'text-foreground',
             )}
           >
             Início
+            {active === 'Início' && <ActiveBar />}
           </Link>
           {/* "Mercado" é a grade do catálogo, que vive na própria home — vai
               para lá e ancora na seção, em vez de ser texto morto. Criadores e
@@ -101,15 +121,16 @@ export function Header({ withDivider = true }: { withDivider?: boolean }) {
             hash="catalogo"
             aria-current={active === 'Mercado' ? 'page' : undefined}
             className={cn(
-              'text-body-16',
+              NAV_ITEM,
               linkFocusRing,
-              active === 'Mercado' ? 'text-text-accent underline' : 'text-foreground',
+              active === 'Mercado' ? 'text-text-accent' : 'text-foreground',
             )}
           >
             Mercado
+            {active === 'Mercado' && <ActiveBar />}
           </Link>
-          <span className="text-body-16 text-foreground">Criadores</span>
-          <span className="text-body-16 text-foreground">Aprenda</span>
+          <span className={cn(NAV_ITEM, 'text-foreground')}>Criadores</span>
+          <span className={cn(NAV_ITEM, 'text-foreground')}>Aprenda</span>
         </nav>
 
         <div className="flex items-center gap-4">
