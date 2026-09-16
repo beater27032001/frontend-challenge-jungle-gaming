@@ -1,15 +1,15 @@
 import { http, HttpResponse } from 'msw'
 import { changePasswordSchema, updateProfileSchema } from '@/types'
 import type { Profile } from '@/types'
-import { persist } from '../db'
+import { db, persist } from '../db'
 import { withScenario } from '../scenarios'
 import { apiError, parseBody, requireSession, sha256Hex } from '../utils'
 
 /** Collector profile: read, patch (email is immutable), change password. */
 
-function toProfile(user: { id: string; name: string; email: string; avatarUrl: string; bio: string; createdAt: string }): Profile {
-  const { id, name, email, avatarUrl, bio, createdAt } = user
-  return { id, name, email, avatarUrl, bio, createdAt }
+function toProfile(user: (typeof db.users)[number]): Profile {
+  const { id, name, username, email, ensName, avatarUrl, bio, createdAt } = user
+  return { id, name, username, email, ensName, avatarUrl, bio, createdAt }
 }
 
 export const profile = [
@@ -23,7 +23,23 @@ export const profile = [
     withScenario(async ({ request, cookies }) => {
       const user = requireSession(cookies)
       const body = await parseBody(request, updateProfileSchema)
+
+      // Fase 8 (spec §2.4): `username` é único, como o endereço de carteira.
+      // 409 com `details` para a UI poder pendurar o erro NO campo, não só
+      // num toast.
+      if (body.username !== undefined) {
+        const taken = db.users.some(
+          (u) => u.id !== user.id && u.username.toLowerCase() === body.username!.toLowerCase(),
+        )
+        if (taken) {
+          return apiError(409, 'conflict', 'Este nome de usuário já está em uso.', {
+            username: 'Este nome de usuário já está em uso.',
+          })
+        }
+        user.username = body.username
+      }
       if (body.name !== undefined) user.name = body.name
+      if (body.ensName !== undefined) user.ensName = body.ensName
       if (body.avatarUrl !== undefined) user.avatarUrl = body.avatarUrl
       if (body.bio !== undefined) user.bio = body.bio
       persist()
