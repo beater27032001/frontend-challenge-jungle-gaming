@@ -1,4 +1,5 @@
 import { useMutation, useQueryClient, type UseMutationResult } from '@tanstack/react-query'
+import { useNavigate } from '@tanstack/react-router'
 import { api } from '@/lib/api'
 import type { LoginRequest, RegisterRequest, Session } from '@/types'
 import { sessionKey } from './use-session'
@@ -35,6 +36,7 @@ export function useRegister(): UseMutationResult<Session, unknown, RegisterReque
 
 export function useLogout(): UseMutationResult<void, unknown, void> {
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
   return useMutation({
     mutationFn: async () => {
       await api.post('/auth/logout')
@@ -55,13 +57,33 @@ export function useLogout(): UseMutationResult<void, unknown, void> {
     // ponytail: sacrifica a suavidade de SPA só no logout; login/registro
     // continuam client-side porque ali o `setQueryData` explícito já prova
     // (testado) que todo consumidor assenta corretamente.
-    onSuccess: () => {
-      queryClient.clear()
-      // Vai para a home, não recarrega no lugar: deslogar de uma rota privada
-      // (/perfil, /carteiras, /pagamento) recarregava lá, a guarda mandava para
-      // /login?redirect=<rota privada>, e fechar o modal voltava para a rota
-      // privada — que redirecionava de novo. Laço infinito, sem saída.
-      window.location.href = '/'
+    onSuccess: async () => {
+      // CAUSA RAIZ, encontrada depois de a entrega estar no ar (a dívida
+      // registrada dizia "por que alguns observadores da mesma query não
+      // recebem a notificação"):
+      //
+      // `queryClient.clear()` REMOVE as queries sem notificar quem as observa.
+      // Componente que não tenha outro motivo para re-renderizar segue
+      // pintando estado derivado de uma query que já não existe. Era por isso
+      // que o Header atualizava e os cards do catálogo não: o Header
+      // re-renderizava porque o `isPending` desta mutation mudava; os cards
+      // não tinham gatilho nenhum.
+      //
+      // Medido: com `clear()`, o cache ficava correto (sessão null, zero
+      // queries de favoritos) e o DOM seguia com um coração `aria-pressed`
+      // true. Estado limpo, tela suja.
+      //
+      // `resetQueries()` devolve ao estado inicial E notifica, então todo
+      // observador recalcula. Com isso o logout voltou a ser client-side: o
+      // `location.href = '/'` que existia aqui era contorno, não conserto.
+      queryClient.setQueryData(sessionKey, null)
+      await queryClient.resetQueries()
+
+      // Sair de uma rota privada precisa navegar: ficar em /perfil faria a
+      // guarda mandar para /login?redirect=/perfil, e fechar o modal voltaria
+      // para lá — o laço da entrega anterior. Agora é navegação do router, não
+      // `location.href`: a página não recarrega.
+      await navigate({ to: '/' })
     },
   })
 }
