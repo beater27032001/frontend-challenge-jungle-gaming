@@ -1,5 +1,4 @@
 import { Link } from '@tanstack/react-router'
-import type { UseQueryResult } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -72,11 +71,22 @@ function GridSkeleton() {
   )
 }
 
+/** Só os 5 campos que este componente usa — estrutural, não `UseQueryResult`,
+ * para a visão de favoritos poder passar `{ ...list, data: filtrado }` sem
+ * brigar com a união discriminada do TanStack Query. */
+export interface CatalogGridQuery {
+  data: Paginated<NftSummary> | undefined
+  isPending: boolean
+  isError: boolean
+  isFetching: boolean
+  refetch: () => void
+}
+
 export function CatalogGrid({
   query,
   search,
 }: {
-  query: UseQueryResult<Paginated<NftSummary>>
+  query: CatalogGridQuery
   search: CatalogSearch
 }) {
   const { data, isPending, isError, isFetching, refetch } = query

@@ -1,11 +1,36 @@
-import { AtSign, Heart, Link2, Mail, Minus, Plus, Search, Star } from 'lucide-react'
+import { Heart, Mail, Minus, Plus, Search, Star } from 'lucide-react'
 import { Link } from '@tanstack/react-router'
 import { useState } from 'react'
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import type { NftDetailViewProps } from '@/features/nft/detail-state'
 import { cn, linkFocusRing } from '@/lib/utils'
 import { CATEGORY_LABELS, tokenIdOf } from '../labels'
+import { NftDetailTabs } from './detail-tabs'
 import { RelatedCarousel } from './related-carousel'
+
+/**
+ * lucide-react v1 não tem ícones de marca (o footer contornou com glifos
+ * genéricos — `Link2` para LinkedIn, `AtSign` para Twitter — e era
+ * exatamente isso que se via aqui). O Figma desenha as marcas, então elas
+ * entram como SVG inline: duas marcas, nenhuma dependência nova.
+ * Dimensões de `specs/04-detalhe-nft.md` §2 (LinkedIn 15×14,4 · Twitter
+ * 16×12,2).
+ */
+function LinkedInIcon() {
+  return (
+    <svg aria-hidden viewBox="0 0 24 24" fill="currentColor" className="h-[14.4px] w-[15px]">
+      <path d="M4.98 3.5a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5ZM2.4 21.5h5.2V9.7H2.4v11.8ZM9.9 9.7h4.98v1.62h.07c.7-1.25 2.4-2.06 4.05-2.06 4.33 0 5.13 2.68 5.13 6.17v6.07h-5.2v-5.38c0-1.28-.02-2.93-1.87-2.93-1.87 0-2.16 1.4-2.16 2.84v5.47H9.9V9.7Z" />
+    </svg>
+  )
+}
+
+function TwitterIcon() {
+  return (
+    <svg aria-hidden viewBox="0 0 24 20" fill="currentColor" className="h-[12.2px] w-[16px]">
+      <path d="M24 2.37a9.6 9.6 0 0 1-2.83.75A4.9 4.9 0 0 0 23.34.37a9.86 9.86 0 0 1-3.13 1.17A4.93 4.93 0 0 0 11.6 5.9 14 14 0 0 1 1.67.9a4.9 4.9 0 0 0 1.52 6.55A4.9 4.9 0 0 1 .96 6.84v.06a4.93 4.93 0 0 0 3.95 4.82 4.96 4.96 0 0 1-2.22.08 4.93 4.93 0 0 0 4.6 3.42A9.88 9.88 0 0 1 0 17.26a13.94 13.94 0 0 0 7.55 2.2c9.06 0 14.01-7.44 14.01-13.89l-.02-.63A9.9 9.9 0 0 0 24 2.37Z" />
+    </svg>
+  )
+}
 
 /**
  * Composição desktop (specs/04-detalhe-nft.md §2/§3, node `10:244`),
@@ -240,42 +265,45 @@ export function NftDetailDesktop(props: NftDetailViewProps) {
                 <p>Atributos: {nft.attributes.join(', ')}</p>
               </div>
 
-              <div className="flex flex-col gap-2">
-                <p className="text-body-15 font-bold leading-[16px] text-foreground">Compartilhar este NFT:</p>
-                <div className="flex items-center gap-[8px]">
-                  <a
-                    href={`https://www.linkedin.com/shareArticle?url=${encodeURIComponent(shareUrl)}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    aria-label="Compartilhar no LinkedIn"
-                    className={cn(linkFocusRing, 'text-foreground')}
-                  >
-                    {/* ponytail: glifos genéricos do lucide v1 (sem ícones de
-                        marca), mesmo precedente dos ícones sociais do footer
-                        (ARCHITECTURE.md fase 2 §3). */}
-                    <Link2 aria-hidden className="h-[14.4px] w-[15px]" />
-                  </a>
-                  <a
-                    href={`mailto:?subject=${encodeURIComponent(nft.title)}&body=${encodeURIComponent(shareUrl)}`}
-                    aria-label="Compartilhar por mensagem"
-                    className={cn(linkFocusRing, 'text-foreground')}
-                  >
-                    <Mail aria-hidden className="size-[18px]" />
-                  </a>
-                  <a
-                    href={`https://twitter.com/intent/tweet?url=${encodeURIComponent(shareUrl)}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    aria-label="Compartilhar no Twitter"
-                    className={cn(linkFocusRing, 'text-foreground')}
-                  >
-                    <AtSign aria-hidden className="h-[12.2px] w-[16px]" />
-                  </a>
-                </div>
+              {/* Rótulo e ícones na MESMA linha (frame `10:244`). Era
+                  `flex-col`, o que jogava os ícones para a linha de baixo;
+                  `shrink-0` + `whitespace-nowrap` impedem que a coluna
+                  estreita volte a quebrá-los. */}
+              <div className="flex items-center gap-[8px]">
+                <p className="whitespace-nowrap text-body-15 font-bold leading-[16px] text-foreground">
+                  Compartilhar este NFT:
+                </p>
+                <a
+                  href={`https://www.linkedin.com/shareArticle?url=${encodeURIComponent(shareUrl)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="Compartilhar no LinkedIn"
+                  className={cn(linkFocusRing, 'shrink-0 text-foreground')}
+                >
+                  <LinkedInIcon />
+                </a>
+                <a
+                  href={`mailto:?subject=${encodeURIComponent(nft.title)}&body=${encodeURIComponent(shareUrl)}`}
+                  aria-label="Compartilhar por e-mail"
+                  className={cn(linkFocusRing, 'shrink-0 text-foreground')}
+                >
+                  <Mail aria-hidden className="size-[18px]" />
+                </a>
+                <a
+                  href={`https://twitter.com/intent/tweet?url=${encodeURIComponent(shareUrl)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="Compartilhar no Twitter"
+                  className={cn(linkFocusRing, 'shrink-0 text-foreground')}
+                >
+                  <TwitterIcon />
+                </a>
               </div>
             </div>
           </div>
         </div>
+
+        <NftDetailTabs nft={nft} />
 
         <RelatedCarousel nft={nft} />
       </div>
