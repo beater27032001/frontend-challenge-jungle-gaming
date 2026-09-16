@@ -43,7 +43,11 @@ function RootLayout() {
   //   342px no fundo; o frame tem Screen Header próprio.
   const isAuthRoute = pathname === '/login' || pathname === '/cadastro'
   const isCart = pathname === '/carrinho'
-  const isBareMobile = isNftDetail || isAuthRoute || isCart
+  // - `/pagamento` (fase 7, specs/07-checkout.md §6): Screen Header próprio e
+  //   Confirm Button como ÚLTIMO elemento da coluna — não é barra fixa, então
+  //   não paga `padding-bottom` de barra nenhuma.
+  const isCheckout = pathname === '/pagamento'
+  const isBareMobile = isNftDetail || isAuthRoute || isCart || isCheckout
 
   // Fase 9: uma única conexão Socket.IO para o app inteiro, atrelada ao
   // escopo do usuário. Ver src/features/realtime/use-realtime.ts.
@@ -67,7 +71,7 @@ function RootLayout() {
       <main
         id="main"
         className={cn(
-          isCart ? 'pb-[358px]' : isNftDetail ? 'pb-[164px]' : isAuthRoute ? 'pb-0' : 'pb-[126px]',
+          isCart ? 'pb-[358px]' : isNftDetail ? 'pb-[164px]' : isAuthRoute || isCheckout ? 'pb-0' : 'pb-[126px]',
           'lg:pb-0',
         )}
       >
