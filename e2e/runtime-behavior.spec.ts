@@ -1,10 +1,12 @@
 import { expect, test } from '@playwright/test'
 import {
+  addToCart,
   ANA,
   awaitMswReady,
   boot,
   BRUNO,
   bootReset,
+  clearCart,
   isExpectedBootNoise,
   login,
   pressFirstTab,
@@ -397,17 +399,16 @@ test.describe('Shell — desktop composition (>=1024, spec §2/§9)', () => {
     }
 
     const search = header.getByRole('button', { name: 'Buscar' })
-    const cart = header.getByRole('button', { name: 'Carrinho' })
-    // Fase 5 (specs/05-auth.md): "Entrar" é <Button asChild><Link>...
-    // </Link></Button> — a role acessível é "link" (o elemento real é um
-    // <a> estilizado de botão), não "button".
+    // Os dois viraram link: Carrinho na fase 6 e Entrar na fase 5. "Entrar"
+    // é <Button asChild><Link>…</Link></Button>, então a role acessível é
+    // "link" — o elemento real é um <a> estilizado de botão, não um button.
+    const cart = header.getByRole('link', { name: 'Carrinho' })
     const entrar = header.getByRole('link', { name: /Entrar/ })
-    // Busca inline (fase 3, resolução OQ1): o botão passa a ser funcional —
-    // cart segue desabilitado (fase 6, sem consumidor ainda). Entrar liga
-    // nesta fase (specs/05-auth.md).
+    // Busca inline (fase 3, resolução OQ1): o botão passa a ser funcional.
+    // Nenhum dos três segue desabilitado a partir daqui.
     await expect(search).toBeEnabled()
     await expect(search).toHaveAttribute('aria-expanded', 'false')
-    await expect(cart).toBeDisabled()
+    await expect(cart).toHaveAttribute('href', '/carrinho')
     await expect(entrar).toBeVisible()
     await expect(entrar).toHaveAttribute('href', '/login')
 
@@ -430,12 +431,21 @@ test.describe('Shell — desktop composition (>=1024, spec §2/§9)', () => {
     expect(rowBox!.width).toBeLessThan(viewportWidth)
   })
 
-  test('cart badge is absent from the DOM while the count is unwired (criterion 15)', async ({ page }) => {
+  test('cart badge appears only with a non-empty cart (criterion 15)', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
-    await boot(page)
-    // Phase 2 doesn't query the cart count (no consumer yet, spec §2) — the
-    // badge (16x16, only rendered when count > 0) must never appear.
-    await expect(page.locator('header [data-slot="badge"]')).toHaveCount(0)
+    await bootReset(page)
+    await clearCart(page)
+
+    // Carrinho vazio: o badge (16x16) não existe no DOM.
+    const cart = page.locator('header').getByRole('link', { name: /^Carrinho/ })
+    await expect(cart).toHaveAttribute('aria-label', 'Carrinho')
+    await expect(cart.locator('span')).toHaveCount(0)
+
+    // Fase 6: a contagem vem de GET /api/cart e soma quantidades, não linhas.
+    await addToCart(page, 'nft-003', 'nft-003-e1', 2)
+    await page.reload()
+    await expect(cart).toHaveAttribute('aria-label', 'Carrinho (2 itens)')
+    await expect(cart.locator('span')).toHaveText('2')
   })
 
   test('mobile search bar and tab bar are absent at desktop widths', async ({ page }) => {
@@ -548,19 +558,27 @@ test.describe('Shell — mobile composition (<1024, spec §10/§11)', () => {
     await boot(page)
 
     const nav = page.getByRole('navigation', { name: 'Navegação principal' })
-    const home = nav.getByRole('link')
+    // Escopo por href, não por role: a fase 6 ligou o Carrinho, então o nav
+    // tem dois links e um `getByRole('link')` solto dispararia strict mode.
+    const home = nav.locator('a[href="/"]')
     await expect(home).toHaveAttribute('aria-current', 'page')
     await expect(home).toHaveClass(/text-text-accent/)
     // Non-chromatic indicator: a 4px dot present only on the active item —
     // state is never color-only (ARCHITECTURE.md decision 4).
     await expect(home.locator('span[aria-hidden]')).toHaveCount(1)
 
-    for (const label of ['Favoritos', 'Carrinho', 'Perfil']) {
+    for (const label of ['Favoritos', 'Perfil']) {
       const btn = page.getByRole('button', { name: label })
       await expect(btn).toBeDisabled()
       await expect(btn).not.toHaveAttribute('aria-current', 'page')
       await expect(btn.locator('span[aria-hidden]')).toHaveCount(0)
     }
+
+    // Carrinho (fase 6) é link, e em `/` não é o item ativo: sem
+    // `aria-current` e sem o ponto indicador (o badge só nasce com contagem).
+    const cart = nav.locator('a[href="/carrinho"]')
+    await expect(cart).not.toHaveAttribute('aria-current', 'page')
+    await expect(cart.locator('span[aria-hidden]')).toHaveCount(0)
   })
 
   test('scrolled to the end at 390, the tab bar never covers the last content of <main> (padding-bottom 126px, criterion 18)', async ({
@@ -635,7 +653,7 @@ test.describe('Accessibility — keyboard navigation and focus (criterion 24)', 
     await expect(page.getByRole('button', { name: 'Buscar' })).toBeFocused()
   })
 
-  test('mobile: skip-link then the search bar controls are the next stops; Favoritos/Carrinho/Perfil/FAB stay disabled and out of tab order', async ({
+  test('mobile: skip-link then the search bar controls are the next stops; Favoritos/Perfil/FAB stay disabled and out of tab order', async ({
     page,
   }) => {
     await page.setViewportSize({ width: 390, height: 844 })
@@ -658,12 +676,15 @@ test.describe('Accessibility — keyboard navigation and focus (criterion 24)', 
     await page.keyboard.press('Tab')
     await expect(page.getByRole('button', { name: 'Filtrar' })).toBeFocused()
 
-    // Favoritos/Carrinho/Perfil (tab bar) e o FAB seguem sem consumidor
-    // (fases 4/6/8): `disabled` já é suficiente para excluí-los da ordem de
-    // tabulação, sem precisar percorrer todo o catálogo até a tab bar.
-    for (const label of ['Favoritos', 'Carrinho', 'Perfil', 'Criar']) {
+    // Favoritos/Perfil (tab bar) e o FAB seguem sem consumidor (fases 4/8):
+    // `disabled` já é suficiente para excluí-los da ordem de tabulação, sem
+    // precisar percorrer todo o catálogo até a tab bar. Carrinho saiu desta
+    // lista na fase 6 — agora é link e ESTÁ na ordem de tabulação, de
+    // propósito (o passeio por teclado do carrinho fica em e2e/cart.spec.ts).
+    for (const label of ['Favoritos', 'Perfil', 'Criar']) {
       await expect(page.getByRole('button', { name: label })).toBeDisabled()
     }
+    await expect(page.getByRole('navigation', { name: 'Navegação principal' }).locator('a[href="/carrinho"]')).toBeVisible()
   })
 })
 
@@ -1034,7 +1055,7 @@ test.describe('plain <Link> elements render the --ring token on focus-visible (f
     // para alcançar Home deixou de ser fixo — foca o link diretamente
     // (`.focus()` programático ainda ativa `:focus-visible` no Chromium),
     // preservando o que este teste de fato verifica: o token do anel.
-    await page.getByRole('navigation', { name: 'Navegação principal' }).getByRole('link').focus()
+    await page.getByRole('navigation', { name: 'Navegação principal' }).locator('a[href="/"]').focus()
     const homeStyle = await page.evaluate(() => {
       const cs = getComputedStyle(document.activeElement!)
       return {
@@ -1236,7 +1257,7 @@ test.describe('Focus ring on plain <Link> does not clip or overlap neighbouring 
 
     // Mesmo racional do teste de ring acima: foca Home diretamente em vez
     // de contar Tabs através do conteúdo real do catálogo.
-    await page.getByRole('navigation', { name: 'Navegação principal' }).getByRole('link').focus()
+    await page.getByRole('navigation', { name: 'Navegação principal' }).locator('a[href="/"]').focus()
     const overflowChain = await page.evaluate(() => {
       const chain: string[] = []
       let el: Element | null = document.activeElement
@@ -1279,7 +1300,7 @@ test.describe('Focus ring on plain <Link> does not clip or overlap neighbouring 
     await boot(page)
 
     // Mesmo racional dos dois testes acima: foca Home diretamente.
-    await page.getByRole('navigation', { name: 'Navegação principal' }).getByRole('link').focus()
+    await page.getByRole('navigation', { name: 'Navegação principal' }).locator('a[href="/"]').focus()
 
     const { ringColorRaw, inkHex, surfaceCardHex } = await page.evaluate(() => {
       const ringColorRaw = getComputedStyle(document.activeElement!).getPropertyValue(
