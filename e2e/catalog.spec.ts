@@ -442,7 +442,7 @@ test.describe('Navigation and shell', () => {
     await expect(pageTwo).toBeFocused()
   })
 
-  test('mobile card: favourite heart is a disabled placeholder; rarity badge only shows on rare/epic/legendary', async ({
+  test('mobile card: favourite heart opens the login modal for a visitor (fase 5); rarity badge only shows on rare/epic/legendary', async ({
     page,
   }) => {
     await page.setViewportSize({ width: 390, height: 844 })
@@ -450,7 +450,16 @@ test.describe('Navigation and shell', () => {
 
     const heart = page.getByRole('button', { name: 'Favoritar' }).first()
     await expect(heart).toBeVisible()
-    await expect(heart).toBeDisabled()
+    await expect(heart).toBeEnabled()
+    await heart.click()
+    // Fase 5 (specs/05-auth.md §8/§9): rota real /login, tela cheia no
+    // mobile (sem X/Esc — só o link para a outra tela e o histórico do
+    // navegador). `redirect` só aparece quando a origem não é '/' (o
+    // default já implícito) — aqui a origem É o catálogo, então a URL fica
+    // limpa (mesma convenção do header).
+    await expect(page).toHaveURL('/login')
+    await page.goBack()
+    await expect(page).not.toHaveURL(/\/login/)
 
     // nft-037 is on page 1 (default `newest` sort) and `epic` (RARITY_OFFSET=2
     // on the fixed rarity table) — badge must read ÉPICO. Not every page-1

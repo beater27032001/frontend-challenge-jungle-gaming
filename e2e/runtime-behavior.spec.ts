@@ -1,5 +1,15 @@
 import { expect, test } from '@playwright/test'
-import { awaitMswReady, boot, isExpectedBootNoise, pressFirstTab } from './helpers'
+import {
+  ANA,
+  awaitMswReady,
+  boot,
+  BRUNO,
+  bootReset,
+  isExpectedBootNoise,
+  login,
+  pressFirstTab,
+  setScenario,
+} from './helpers'
 
 /**
  * Phase 1 runtime checks: things only observable against the real running
@@ -369,7 +379,7 @@ test.describe('Smoke', () => {
  * structure against `specs/02-design-system.md` §§2/9/10.
  */
 test.describe('Shell — desktop composition (>=1024, spec §2/§9)', () => {
-  test('header renders KURIO, the 4 nav items with Início active, and the disabled search/cart/Entrar controls', async ({
+  test('header renders KURIO, the 4 nav items with Início active, and the disabled cart / enabled Entrar controls', async ({
     page,
   }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
@@ -388,13 +398,18 @@ test.describe('Shell — desktop composition (>=1024, spec §2/§9)', () => {
 
     const search = header.getByRole('button', { name: 'Buscar' })
     const cart = header.getByRole('button', { name: 'Carrinho' })
-    const entrar = header.getByRole('button', { name: /Entrar/ })
+    // Fase 5 (specs/05-auth.md): "Entrar" é <Button asChild><Link>...
+    // </Link></Button> — a role acessível é "link" (o elemento real é um
+    // <a> estilizado de botão), não "button".
+    const entrar = header.getByRole('link', { name: /Entrar/ })
     // Busca inline (fase 3, resolução OQ1): o botão passa a ser funcional —
-    // só cart/Entrar seguem desabilitados (fases 5/6, sem consumidor ainda).
+    // cart segue desabilitado (fase 6, sem consumidor ainda). Entrar liga
+    // nesta fase (specs/05-auth.md).
     await expect(search).toBeEnabled()
     await expect(search).toHaveAttribute('aria-expanded', 'false')
     await expect(cart).toBeDisabled()
-    await expect(entrar).toBeDisabled()
+    await expect(entrar).toBeVisible()
+    await expect(entrar).toHaveAttribute('href', '/login')
 
     const entrarBox = await entrar.boundingBox()
     expect(entrarBox?.width).toBe(100)
@@ -1394,5 +1409,349 @@ test.describe('Full breakpoint round-trip (fix iteration 1 regression): 1440 -> 
     ).toBe(true)
 
     expect(consoleErrors.filter((msg) => !isExpectedBootNoise(msg))).toEqual([])
+  })
+})
+
+/**
+ * Fase 5 (specs/05-auth.md): `/login` e `/cadastro` são rotas reais (não
+ * search param — §9), com composição desktop (Dialog do Radix, focus trap/
+ * Esc nativos) e mobile (tela cheia, `LoginMobile`/`RegisterMobile`)
+ * distintas. `redirect` carrega a página de origem, a sessão persiste após
+ * refresh, a higiene de cache no login/logout (§11, eliminatório), o
+ * interceptor de `session_expired`, e favoritos otimistas com rollback (§4,
+ * exigência ainda não cumprida por nenhuma fase anterior). Todos os testes
+ * de composição desktop fixam 1440 explicitamente — a mesma rota também
+ * roda `LoginMobile`/`RegisterMobile` sob 390, com cópia própria (spec §8),
+ * cobertos num describe dedicado abaixo.
+ */
+test.describe('Login/cadastro — composição desktop (fase 5, specs/05-auth.md §3/§7)', () => {
+  test('/login direto por URL abre o Dialog sobre o catálogo; Esc navega para o redirect', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.goto('/login?redirect=%2F%3Fq%3Darte')
+    await awaitMswReady(page)
+    await expect(page.getByRole('dialog')).toBeVisible()
+    await expect(page.getByRole('tab', { name: 'Entrar' })).toHaveAttribute('aria-selected', 'true')
+
+    await page.keyboard.press('Escape')
+    await expect(page).toHaveURL(/q=arte/)
+    await expect(page).not.toHaveURL(/\/login/)
+  })
+
+  test('?redirect= inválido (não começa com /) degrada para "/" via .catch, sem crash', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.goto('/login?redirect=https://evil.example.com')
+    await awaitMswReady(page)
+    await expect(page.getByRole('dialog')).toBeVisible()
+
+    await page.keyboard.press('Escape')
+    await expect(page).toHaveURL('/')
+  })
+
+  test('trocar de aba navega para /cadastro (rota real) sem vazar valor de um form no outro', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.goto('/login')
+    await awaitMswReady(page)
+    await page.getByRole('dialog').getByPlaceholder('E-mail').fill('rascunho@exemplo.com')
+
+    await page.getByRole('tab', { name: 'Criar conta' }).click()
+    await expect(page).toHaveURL('/cadastro')
+    await expect(page.getByRole('dialog').getByPlaceholder('Nome de usuário')).toBeVisible()
+    await expect(page.getByRole('dialog').getByPlaceholder('Digite seu e-mail')).toHaveValue('')
+
+    await page.getByRole('tab', { name: 'Entrar' }).click()
+    await expect(page).toHaveURL('/login')
+    await expect(page.getByRole('dialog').getByPlaceholder('E-mail')).toHaveValue('')
+  })
+
+  test('login com senha errada mostra "E-mail ou senha inválidos." sem fechar o Dialog; credencial válida navega ao redirect e liga o header logado', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await bootReset(page)
+    await page.goto('/login?redirect=%2Fnft%2Fnft-001')
+    await awaitMswReady(page)
+
+    await page.getByRole('dialog').getByPlaceholder('E-mail').fill(ANA.email)
+    await page.getByRole('dialog').getByPlaceholder('Senha', { exact: true }).fill('senha-errada')
+    await page.getByRole('dialog').getByRole('button', { name: 'Entrar', exact: true }).click()
+
+    await expect(page.getByRole('alert')).toHaveText('E-mail ou senha inválidos.')
+    await expect(page.getByRole('dialog')).toBeVisible()
+
+    await page.getByRole('dialog').getByPlaceholder('Senha', { exact: true }).fill(ANA.password)
+    await page.getByRole('dialog').getByRole('button', { name: 'Entrar', exact: true }).click()
+
+    await expect(page).toHaveURL('/nft/nft-001')
+    await expect(page.getByRole('button', { name: 'Sair' })).toBeVisible()
+
+    // Critério 4: refresh mantém a sessão (cookie + GET /auth/session).
+    await page.reload()
+    await awaitMswReady(page)
+    await expect(page.getByRole('button', { name: 'Sair' })).toBeVisible()
+  })
+
+  test('cadastro com register-conflict mostra erro no campo e-mail; com default e e-mail novo autentica e navega ao redirect', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await bootReset(page)
+    await setScenario(page, 'register-conflict')
+    await page.goto('/cadastro')
+    await awaitMswReady(page)
+
+    await page.getByRole('dialog').getByPlaceholder('Nome de usuário').fill('Visitante Novo')
+    await page.getByRole('dialog').getByPlaceholder('Digite seu e-mail').fill(`novo-${Date.now()}@exemplo.com`)
+    await page.getByRole('dialog').getByPlaceholder('Senha', { exact: true }).fill('senha12345')
+    await page.getByRole('dialog').getByPlaceholder('Confirmar senha').fill('senha12345')
+    await page.getByRole('dialog').getByRole('button', { name: 'Criar conta', exact: true }).click()
+
+    await expect(page.getByText('Este e-mail já está cadastrado.')).toBeVisible()
+    await expect(page.getByRole('dialog')).toBeVisible()
+
+    await setScenario(page, 'default')
+    await page.getByRole('dialog').getByRole('button', { name: 'Criar conta', exact: true }).click()
+
+    await expect(page).toHaveURL('/')
+    await expect(page.getByRole('button', { name: 'Sair' })).toBeVisible()
+  })
+
+  test('cadastro com senhas divergentes é barrado no cliente, sem request (zod antes da API)', async ({
+    page,
+  }) => {
+    let registerRequests = 0
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await bootReset(page)
+    await page.goto('/cadastro')
+    await awaitMswReady(page)
+    page.on('request', (req) => {
+      if (req.url().includes('/api/auth/register')) registerRequests += 1
+    })
+
+    await page.getByRole('dialog').getByPlaceholder('Nome de usuário').fill('Alguém')
+    await page.getByRole('dialog').getByPlaceholder('Digite seu e-mail').fill('alguem@exemplo.com')
+    await page.getByRole('dialog').getByPlaceholder('Senha', { exact: true }).fill('senha12345')
+    await page.getByRole('dialog').getByPlaceholder('Confirmar senha').fill('outra-coisa')
+    await page.getByRole('dialog').getByRole('button', { name: 'Criar conta', exact: true }).click()
+
+    await expect(page.getByText('As senhas não coincidem.')).toBeVisible()
+    await expect(page.getByRole('dialog')).toBeVisible()
+    expect(registerRequests).toBe(0)
+  })
+
+  test('Google, Facebook e "Esqueceu a senha?" nunca disparam request nem aparentam sucesso', async ({
+    page,
+  }) => {
+    let socialRequests = 0
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.goto('/login')
+    await awaitMswReady(page)
+    page.on('request', (req) => {
+      const url = req.url()
+      if (url.includes('google') || url.includes('facebook')) socialRequests += 1
+    })
+
+    const google = page.getByRole('button', { name: /Continuar com Google/ })
+    const facebook = page.getByRole('button', { name: /Continuar com Facebook/ })
+    const forgot = page.getByRole('button', { name: 'Esqueceu a senha?' })
+
+    await expect(google).toBeDisabled()
+    await expect(facebook).toBeDisabled()
+    await expect(forgot).toBeDisabled()
+    await expect(forgot).toHaveAttribute('title', /backend/)
+
+    expect(socialRequests).toBe(0)
+  })
+})
+
+test.describe('Login/cadastro — composição mobile (fase 5, specs/05-auth.md §8)', () => {
+  test('/login e /cadastro são telas cheias no mobile, com o link para a outra tela, sem TabBar/MobileSearchBar', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 })
+    await page.goto('/login')
+    await awaitMswReady(page)
+
+    await expect(page.getByRole('dialog')).toBeHidden() // Dialog não monta em <lg
+    // `main` isola o "KURIO" próprio da tela mobile do header/footer, que
+    // seguem no DOM (`hidden lg:*`) — mesmo texto, elemento diferente.
+    await expect(page.locator('main').getByText('KURIO', { exact: true })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Entrar' })).toBeVisible()
+    await expect(page.getByRole('navigation', { name: 'Navegação principal' })).toBeHidden()
+
+    await page.getByRole('link', { name: 'Crie uma conta' }).click()
+    await expect(page).toHaveURL('/cadastro')
+    await expect(page.getByRole('heading', { name: 'Criar perfil de colecionador' })).toBeVisible()
+    await expect(page.getByPlaceholder('Nome de usuário')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Criar perfil' })).toBeVisible()
+
+    await page.getByRole('link', { name: 'Entre', exact: true }).click()
+    await expect(page).toHaveURL('/login')
+  })
+
+  test('login mobile com credencial válida navega ao redirect', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 })
+    await bootReset(page)
+    await page.goto('/login')
+    await awaitMswReady(page)
+
+    await page.getByPlaceholder('contato@email.com').fill(ANA.email)
+    await page.getByPlaceholder('Senha', { exact: true }).fill(ANA.password)
+    await page.getByRole('button', { name: 'Entrar', exact: true }).click()
+
+    await expect(page).toHaveURL('/')
+  })
+})
+
+test.describe('Logout limpa o cache (fase 5, §11 eliminatório) — prova de zero vazamento entre usuários', () => {
+  test('favoritar como Ana, deslogar, logar como Bruno: o coração de Bruno nunca herda o favorito de Ana', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await bootReset(page)
+    await page.goto('/')
+    await awaitMswReady(page)
+
+    await page.goto('/login')
+    await awaitMswReady(page)
+    await page.getByRole('dialog').getByPlaceholder('E-mail').fill(ANA.email)
+    await page.getByRole('dialog').getByPlaceholder('Senha', { exact: true }).fill(ANA.password)
+    await page.getByRole('dialog').getByRole('button', { name: 'Entrar', exact: true }).click()
+    await expect(page.getByRole('button', { name: 'Sair' })).toBeVisible()
+
+    // Ana favorita o primeiro NFT do catálogo (card mobile — o único com
+    // coração nesta fase); nft-005 não está em nenhuma fixture de
+    // favoritos (Ana: nft-002/007/021, Bruno: nft-001), então o estado
+    // inicial é conhecido: não favoritado.
+    await page.setViewportSize({ width: 390, height: 844 })
+    const heart = page.getByRole('button', { name: 'Favoritar' }).first()
+    // Espera o PUT assentar no servidor antes de deslogar — só o estado
+    // otimista (instantâneo) não prova que o favorito de fato existe na
+    // sessão de Ana quando o logout roda a seguir.
+    const [heartResponse] = await Promise.all([
+      page.waitForResponse((res) => res.url().includes('/api/favorites/') && res.request().method() === 'PUT'),
+      heart.click(),
+    ])
+    expect(heartResponse.status()).toBe(200)
+    await expect(heart).toHaveAttribute('aria-pressed', 'true')
+
+    // O botão Sair só existe no header desktop nesta fase (dívida da fase 8
+    // registrada em ARCHITECTURE.md) — volta para 1440 para acioná-lo.
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.getByRole('button', { name: 'Sair' }).click()
+    // Header logado usa <Button asChild><Link>...</Link></Button> — a role
+    // acessível é "link", não "button" (mesmo elemento estilizado de botão).
+    await expect(page.getByRole('link', { name: 'Entrar' })).toBeVisible()
+
+    // Visitante: o mesmo card nunca mostra o favorito de Ana (cache foi
+    // limpo, não invalidado — nem por um frame).
+    await page.setViewportSize({ width: 390, height: 844 })
+    const guestHeart = page.getByRole('button', { name: 'Favoritar' }).first()
+    await expect(guestHeart).toHaveAttribute('aria-pressed', 'false')
+
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.goto('/login')
+    await awaitMswReady(page)
+    await page.getByRole('dialog').getByPlaceholder('E-mail').fill(BRUNO.email)
+    await page.getByRole('dialog').getByPlaceholder('Senha', { exact: true }).fill(BRUNO.password)
+    await page.getByRole('dialog').getByRole('button', { name: 'Entrar', exact: true }).click()
+    await expect(page).toHaveURL('/')
+
+    await page.setViewportSize({ width: 390, height: 844 })
+    const brunoHeart = page.getByRole('button', { name: 'Favoritar' }).first()
+    await expect(brunoHeart).toHaveAttribute('aria-pressed', 'false')
+  })
+})
+
+test.describe('Favoritos otimistas com rollback (fase 5, §4 — exigência ainda não cumprida por nenhuma fase)', () => {
+  // nft-005 não está em nenhuma fixture de favoritos (Ana: nft-002/007/021,
+  // Bruno: nft-001) — estado inicial conhecido: não favoritado.
+  test('cenário slow: o coração reflete o toggle antes da resposta do servidor', async ({ page }) => {
+    await bootReset(page)
+    await login(page, ANA)
+    await page.goto('/nft/nft-005')
+    await awaitMswReady(page)
+    await setScenario(page, 'slow')
+
+    const heart = page.getByRole('button', { name: 'Favoritar' })
+    await expect(heart).toHaveAttribute('aria-pressed', 'false')
+    await heart.click()
+    // Otimista: reflete ANTES da resposta (2500ms do cenário slow) — a
+    // asserção roda bem antes desse teto.
+    await expect(heart).toHaveAttribute('aria-pressed', 'true', { timeout: 500 })
+  })
+
+  test('cenário server-error: o coração reverte ao estado anterior e aparece um toast de erro', async ({
+    page,
+  }) => {
+    await bootReset(page)
+    await login(page, ANA)
+    await page.goto('/nft/nft-005')
+    await awaitMswReady(page)
+
+    const heart = page.getByRole('button', { name: 'Favoritar' })
+    await expect(heart).toHaveAttribute('aria-pressed', 'false')
+
+    await setScenario(page, 'server-error')
+    await heart.click()
+
+    await expect(heart).toHaveAttribute('aria-pressed', 'true') // otimista, antes do rollback
+    await expect(heart).toHaveAttribute('aria-pressed', 'false') // rollback (onError)
+    // O cenário `server-error` responde com a mensagem da API ("Falha
+    // transitória do servidor."), que o toast repassa — não o fallback
+    // genérico de `useToggleFavorite` (só usado sem corpo de erro).
+    await expect(page.getByText('Falha transitória do servidor.')).toBeVisible()
+  })
+
+  test('favoritar e refresh: o coração continua preenchido (GET /favorites)', async ({ page }) => {
+    await bootReset(page)
+    await login(page, ANA)
+    await page.goto('/nft/nft-005')
+    await awaitMswReady(page)
+
+    const heart = page.getByRole('button', { name: 'Favoritar' })
+    // Otimista mostra `true` antes da rede — `page.reload()` cortaria o PUT
+    // em voo se disparado nesse instante. `waitForResponse` espera o
+    // servidor confirmar antes de recarregar.
+    const [response] = await Promise.all([
+      page.waitForResponse((res) => res.url().includes('/api/favorites/') && res.request().method() === 'PUT'),
+      heart.click(),
+    ])
+    expect(response.status()).toBe(200)
+    await expect(heart).toHaveAttribute('aria-pressed', 'true')
+
+    await page.reload()
+    await awaitMswReady(page)
+    await expect(page.getByRole('button', { name: 'Favoritar' })).toHaveAttribute('aria-pressed', 'true')
+  })
+})
+
+test.describe('Sessão expirada durante a navegação (fase 5, §4/§6 — cenário session-expired, primeiro consumidor)', () => {
+  test('togglar favorito com session-expired ativo dispara toast + navega para /login com redirect de volta à página', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await bootReset(page)
+    await login(page, ANA)
+    await page.goto('/nft/nft-005')
+    await awaitMswReady(page)
+    // `awaitMswReady` só garante que os mocks estão de pé, não que o GET
+    // /favorites do carregamento da página já assentou — trocar o cenário
+    // com ele ainda em voo faria ESSA resposta (não o clique) disparar o
+    // session_expired primeiro, antes do teste sequer clicar.
+    const heart = page.getByRole('button', { name: 'Favoritar' })
+    await expect(heart).toHaveAttribute('aria-pressed', 'false')
+
+    await setScenario(page, 'session-expired')
+    await heart.click()
+
+    await expect(page.getByText('Sessão expirada. Entre novamente para continuar.')).toBeVisible()
+    await expect(page).toHaveURL(/\/login/)
+    await expect(page).toHaveURL(/redirect=.*nft-005/)
+    await expect(page.getByRole('dialog')).toBeVisible()
+    await expect(page.getByRole('tab', { name: 'Entrar' })).toHaveAttribute('aria-selected', 'true')
   })
 })
