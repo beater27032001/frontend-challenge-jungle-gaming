@@ -92,6 +92,11 @@ recuperação após refresh. Recibo é snapshot imutável.
 Edição de dados, avatar, troca de senha. Carteiras principal e secundária. Validação
 de formulário e de erro vindo da API. Alteração confirmada permanece após refresh.
 
+Transcrição do Figma em `specs/08-perfil-carteiras.md`. Nenhuma das duas telas tem
+frame mobile: a derivação está na seção 5 do spec. Três decisões de escopo esperam
+o usuário (itens de menu sem tela, campos desenhados fora do contrato, `DELETE
+/api/wallets/:id`).
+
 ## Fase 9 — Tempo real
 
 `nft.updated` e `order.updated` via socket.io-client contra o binding MSW. Identidade

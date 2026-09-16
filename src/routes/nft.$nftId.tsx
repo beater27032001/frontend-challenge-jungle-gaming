@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { createFileRoute, Link } from '@tanstack/react-router'
+import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
 import { isAxiosError } from 'axios'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
@@ -8,6 +8,7 @@ import { useAddToCart } from '@/features/cart/use-add-to-cart'
 import { useSession } from '@/features/auth/use-session'
 import { NftDetailDesktop } from '@/features/nft/components/nft-detail-desktop'
 import { NftDetailMobile } from '@/features/nft/components/nft-detail-mobile'
+import { favoritesOptions, useToggleFavorite } from '@/features/nft/favorites'
 import { nftDetailOptions } from '@/features/nft/queries'
 import { linkFocusRing, cn } from '@/lib/utils'
 
@@ -28,10 +29,16 @@ interface PurchaseState {
 
 function NftDetailRoute() {
   const { nftId } = Route.useParams()
+  const navigate = useNavigate()
   const session = useSession()
   const scope = session.data?.user.id ?? 'guest'
   const query = useQuery({ ...nftDetailOptions(scope, nftId), enabled: !session.isPending })
   const addToCart = useAddToCart()
+  // Fase 5 (specs/05-auth.md §4): favoritos são domínio nft; visitante nunca
+  // dispara `/favorites` (`enabled`), clique dele abre o modal de login.
+  const favorites = useQuery({ ...favoritesOptions(scope), enabled: !!session.data })
+  const isFavorited = favorites.data?.nftIds.includes(nftId) ?? false
+  const toggleFavorite = useToggleFavorite(scope)
 
   const [state, setState] = useState<PurchaseState | null>(null)
   const nft = query.data
@@ -72,6 +79,14 @@ function NftDetailRoute() {
     addToCart.mutate({ nftId: nft.id, editionId: current.editionId, quantity: current.quantity })
   }
 
+  function onToggleFavorite() {
+    if (!session.data) {
+      navigate({ to: '/login', search: { redirect: `/nft/${nftId}` } })
+      return
+    }
+    toggleFavorite.mutate({ nftId, favorited: isFavorited })
+  }
+
   if (query.isPending) {
     return <DetailSkeleton />
   }
@@ -99,6 +114,8 @@ function NftDetailRoute() {
     onSelectImage,
     onBuy,
     isBuying: addToCart.isPending,
+    isFavorited,
+    onToggleFavorite,
   }
 
   return (
