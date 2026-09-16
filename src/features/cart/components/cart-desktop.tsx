@@ -240,16 +240,24 @@ export function CartDesktop(props: CartViewProps) {
           )}
 
           <div className="flex flex-col items-center gap-[12px]">
-            {/* A fase 7 (Pagamento) liga isto: a copy é a do Figma, mas nada
-                aqui conecta carteira — fingir sucesso é proibido pelo
-                CHALLENGE §2. */}
-            <button
-              type="button"
-              disabled
-              className="h-[40px] w-full rounded-[3px] bg-primary text-body-15 font-bold text-ink disabled:opacity-50"
+            {/* Fase 7: o CTA agora leva ao checkout, que é onde a carteira é
+                escolhida (`/pagamento`, spec 07 §2). Continua desabilitado com
+                carrinho vazio — não há o que pagar, e um link que leva a uma
+                tela sem cotação aparenta função que não existe. O cupom viaja
+                na URL para a cotação do checkout nascer com ele. */}
+            <Link
+              to="/pagamento"
+              search={{ coupon: appliedCoupon ?? undefined }}
+              disabled={items.length === 0}
+              aria-disabled={items.length === 0}
+              className={cn(
+                linkFocusRing,
+                'flex h-[40px] w-full items-center justify-center rounded-[3px] bg-primary text-body-15 font-bold text-ink',
+                items.length === 0 && 'pointer-events-none opacity-50',
+              )}
             >
               Conectar e finalizar
-            </button>
+            </Link>
             <Link to="/" className={cn(linkFocusRing, 'text-body-15 text-text-accent')}>
               Continuar explorando
             </Link>

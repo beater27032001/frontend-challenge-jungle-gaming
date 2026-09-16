@@ -211,17 +211,23 @@ export function CartMobile(props: CartViewProps) {
           </p>
         )}
 
-        {/* A fase 7 liga isto (ver comentário gêmeo em cart-desktop.tsx). */}
-        <button
-          type="button"
-          disabled
-          className="h-[60px] w-full rounded-[40px] text-body-16 font-bold text-ink disabled:opacity-50"
+        {/* Fase 7: ver o comentário gêmeo em cart-desktop.tsx. */}
+        <Link
+          to="/pagamento"
+          search={{ coupon: appliedCoupon ?? undefined }}
+          disabled={items.length === 0}
+          aria-disabled={items.length === 0}
+          className={cn(
+            linkFocusRing,
+            'flex h-[60px] w-full items-center justify-center rounded-[40px] text-body-16 font-bold text-ink',
+            items.length === 0 && 'pointer-events-none opacity-50',
+          )}
           style={{
             background: 'linear-gradient(108.86deg, #d28a4c 3.96%, rgba(210,138,76,0.8) 121.97%)',
           }}
         >
           Conectar e finalizar
-        </button>
+        </Link>
       </section>
     </div>
   )
