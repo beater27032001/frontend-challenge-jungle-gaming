@@ -8,9 +8,13 @@ A stack é a obrigatória do §2 do desafio: **React 19 · TypeScript · TanStac
 TanStack Query · Axios · Socket.IO · Tailwind CSS v4 · shadcn/ui · MSW · Playwright ·
 Lighthouse**, com Vite como build e pnpm como gerenciador.
 
-- **Deploy público:** `TODO: preencher a URL da Vercel` — o `vercel.json` (SPA rewrite +
-  headers do service worker do MSW) já está no repositório, mas a URL ainda não foi
-  publicada.
+- **Deploy público:** <https://frontend-challenge-jungle-gaming.vercel.app/> — build da
+  branch `main` pela integração com o GitHub. O `vercel.json` cuida do SPA rewrite (rota
+  profunda como `/nft/nft-003` abre direto) e dos headers do service worker do MSW
+  (`no-cache` + `Service-Worker-Allowed`), sem os quais os mocks não sobem em produção.
+
+  > A URL serve o que estiver em `main`. Fases entregues mas ainda não mergeadas aparecem
+  > aqui como entregues e **não** estarão no ar até o merge — rode local para vê-las.
 - **Decisões, desvios do Figma e limitações detalhadas:** [`ARCHITECTURE.md`](ARCHITECTURE.md).
 - **Plano de fases e estado da entrega:** [`specs/00-plano.md`](specs/00-plano.md) e a seção
   [Estado da entrega](#estado-da-entrega) abaixo.
