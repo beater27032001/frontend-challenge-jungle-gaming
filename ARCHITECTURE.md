@@ -566,6 +566,96 @@ presunção original.
     represar um segundo evento genuíno depois de relogar.
 
 
+## Fase 6 — Carrinho
+
+Decisões tomadas onde o Figma não desenha. Todas foram levantadas pelo agente da
+fase e revisadas antes de entrar.
+
+37. **Total da linha é calculado, não lido da cotação.** `mulQty` (`big.js`) sobre
+    preço unitário × quantidade. A cotação também traz `lineTotalEth`, mas fica um
+    instante atrasada em relação ao carrinho logo após mexer no stepper, e o
+    número piscaria. Subtotal, desconto, taxa de rede e total **continuam vindo de
+    `POST /api/quote`**, como o CLAUDE.md exige — a exceção é só a linha.
+38. **Cupom recusado esconde desconto, taxa e total** (mostra `—`) e preserva o
+    subtotal, que vem de `GET /cart`. A alternativa — cotar sem cupom em paralelo —
+    custava mais código e escondia o erro.
+39. **Cupom é normalizado para maiúsculo** antes de enviar; o mock compara exato.
+40. **Remover cupom não existe no Figma.** Com cupom aplicado, o input fica
+    `readOnly` com o código e o botão passa a "Remover". Copy nossa.
+41. **Estado vazio não existe no Figma.** Card com "Seu carrinho está vazio" e link
+    "Continuar explorando".
+42. **Carrinho vazio remove a cotação do cache** em vez de invalidar: `POST /quote`
+    com carrinho vazio responde 400, e invalidar geraria um erro de console a cada
+    esvaziamento.
+43. **A lixeira colide com o botão `+` no próprio Figma** (`313..337` contra
+    `318..342`, verificado no arquivo, não erro de transcrição). Adotado: uma linha
+    à direita, stepper e depois lixeira, sem sobreposição.
+44. **Steppers do mobile são 24×24 no Figma**, abaixo do alvo de toque de 44px. A
+    área clicável foi ampliada sem mover o visual.
+45. **O stepper virou componente** (`src/components/quantity-stepper.tsx`),
+    extraído da Buy Bar mobile da fase 4, que o tinha embutido. Ganhou focus ring,
+    que a versão original não tinha.
+46. **Defeito da fase 4 corrigido na origem:** `useAddToCart` não sincronizava
+    cache nenhum, então o badge e a tela do carrinho só reagiriam depois do
+    `staleTime` de 30s.
+47. **O breadcrumb do desktop foi implementado como `<h1>` e corrigido depois.** O
+    bloco de 244×16 é `Início / Mercado / Carrinho` (`11:1309`). A causa foi o spec
+    dizer "breadcrumb ou título, não extraído em detalhe" — ambiguidade no spec
+    vira escolha errada no código. O `<h1>` permanece em `sr-only`, porque o
+    desktop não desenha título de página e leitor de tela precisa de um.
+
+## Dívidas para as fases 7 e 8
+
+Consolidado do que ficou aberto nas fases 5, 6 e 9. Quem pegar a fase 7 ou a 8
+deve ler esta lista antes de planejar.
+
+**Bloqueiam a fase 7 (checkout + confirmação)**
+
+1. **O CTA "Conectar e finalizar" do carrinho está `disabled`**, nas duas
+   composições, com comentário apontando para cá. Não existia rota de destino.
+2. **O passo 4 do cenário obrigatório do §7 não tem tela.** A fase 9 deixou pronta
+   a regra (`isQuoteStale`/`staleQuoteItems`, função pura) e o servidor já devolve
+   409 `quote_outdated`, mas não há botão "Confirmar" para bloquear. A fase 7 fecha
+   o cenário: preço muda → aviso → confirmar barrado → recotar.
+3. **`order.updated` não tem superfície visual** além do toast. Escreve em
+   `orderKey(scope, id)` (`src/features/checkout/queries.ts`, já criado pela fase
+   9); falta a tela que lê essa chave.
+4. **Não há seletor de rede.** A cotação usa `'ethereum'` fixo. A escolha de rede é
+   da fase 7 e já tem desenho (spec 07 §6.3 e §6.4).
+5. **Os quatro cenários de mock nunca exercitados** continuam sem consumidor:
+   `price-changed`, `sold-out`, `order-timeout`, `payment-declined`. O
+   `order-timeout` é o mais importante — a recuperação por idempotência precisa
+   devolver o **mesmo** pedido.
+
+**Bloqueiam a fase 8 (perfil + carteiras)**
+
+6. **Estender o mock**, decidido pelo usuário (spec 08 §2.4 e §3.5): `Profile`
+   ganha `username` (com 409 em colisão) e `ensName`; `Wallet` ganha `type` (enum
+   metamask/walletconnect/coinbase) e `referralCode` (opcional). Fixtures e testes
+   de contrato junto.
+7. **Criar `DELETE /api/wallets/:id`** (spec 08 §3.5), com 409 ao remover a única
+   primária e promoção da secundária mais antiga quando existe — avisando qual.
+8. **Nenhuma das duas telas tem frame mobile.** A derivação está no spec 08 §5, com
+   a referência de qual frame originou cada regra. Registrar como desvio consciente.
+
+**Abertas, sem bloquear ninguém**
+
+9. **Causa raiz do vazamento no logout não encontrada.** Dois investigadores
+   independentes (o agente da fase 5 e a coordenação) leram `use-auth.ts`,
+   `favorites.ts`, `use-session.ts` e a propagação de `scope` sem achar por que
+   alguns observadores da mesma query não recebem a notificação após
+   `queryClient.clear()`. O conserto em vigor — `clear()` + `location.reload()` —
+   **garante** o requisito eliminatório do §11; o custo é perder a suavidade de SPA
+   no logout. Vale investigar com calma depois da entrega.
+10. **O "modal sobre o catálogo" não mantém a página de fundo montada.** O TanStack
+    Router não tem intercepting routes; o retorno ao fluxo é por `redirect`. Atende
+    o §3 funcionalmente, não visualmente.
+11. **Não existe `specs/09-tempo-real.md`.** Todas as outras fases têm spec própria;
+    o conteúdo da 9 está só aqui.
+12. **A conexão declara o próprio dono** (`query: { userId: scope }` no handshake).
+    Num mock rodando no contexto da página não há cookie por conexão, mas é o
+    cliente afirmando identidade — aceitável aqui, jamais em produção.
+
 ## Limitação conhecida — flake residual na suíte E2E
 
 Para quem avalia: `pnpm test` roda 380 testes em desktop 1440 e mobile 390, e
