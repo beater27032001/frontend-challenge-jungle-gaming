@@ -46,11 +46,20 @@ export function NftCardMobile({ nft }: { nft: NftSummary }) {
         aria-label={nft.title}
         className={cn(linkFocusRing, 'flex flex-col gap-2')}
       >
-        <div className="relative h-[200px] w-full rounded-[20px] bg-[linear-gradient(139.55deg,#241612_12%,#2f1d15_106.59%)]">
+        <div className="relative h-[200px] w-full overflow-hidden rounded-[20px] bg-[linear-gradient(139.55deg,#241612_12%,#2f1d15_106.59%)]">
+          {/* `inset-[3.5px]` sozinho não dimensiona um <img>: com os quatro
+              insets e `width/height: auto`, o elemento substituído volta à
+              própria razão intrínseca (quadrada) e ancora no topo. A 175 de
+              largura isso só deixava uma faixa da placa visível embaixo; a
+              768, onde a coluna vira 356, a arte crescia para 356×356 e
+              transbordava 156px POR CIMA do card seguinte. Agora a altura é
+              explícita (168, specs/03-catalogo.md §4) e centrada; o
+              `overflow-hidden` da placa é a trava que impede qualquer filho
+              de vazar de novo. */}
           <img
             src={nft.imageUrl}
             alt={nft.title}
-            className="absolute inset-[3.5px] rounded-[16px] object-cover"
+            className="absolute inset-x-[3.5px] top-1/2 h-[168px] w-[calc(100%-7px)] -translate-y-1/2 rounded-[16px] object-cover"
           />
           {badge && (
             // ponytail: px derivado do exemplo RARO (68×32); offset esquerdo

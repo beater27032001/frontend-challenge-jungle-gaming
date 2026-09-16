@@ -118,7 +118,7 @@ obrigatório com asterisco**, e não tem campo de bio.
 | Nome de usuário | **não existe** |
 | E-mail | existe em `Profile`, **read-only** no PATCH |
 | Nome ENS | **não existe** |
-| Apelido da carteira | pertence a `Wallet.label`, tela errada |
+| Apelido da carteira | `Wallet.label` da carteira **primária** ✅ |
 | Avatar | `avatarUrl` ✅ |
 | *(ausente)* | `bio` existe no contrato e não é desenhado |
 
@@ -132,7 +132,7 @@ O que muda em `src/types/profile.ts` e `src/mocks/handlers/profile.ts`:
 | --- | --- |
 | Nome de usuário | **adicionar** `username` a `Profile` e a `updateProfileSchema` |
 | Nome ENS | **adicionar** `ensName` a `Profile` e a `updateProfileSchema` |
-| Apelido da carteira | **remover da tela** — é `Wallet.label`, pertence à §3 |
+| Apelido da carteira | **fica na tela** — edita `Wallet.label` da primária via `PATCH /api/wallets/:id` |
 | E-mail | continua **imutável**: `readOnly` + `aria-describedby` explicando |
 | `bio` | fica no contrato, **sem campo na tela** (o Figma não desenha) |
 
@@ -144,6 +144,30 @@ o valor completo, não só o prefixo.
 Os dois campos entram nas fixtures (`src/mocks/fixtures.ts`) e ganham teste de
 contrato — incluindo o 409 de `username` duplicado, que precisa **falhar uma vez**
 antes de virar verde, pela regra do `CLAUDE.md`.
+
+#### ⚠️ Correção do usuário — "Apelido da carteira" NÃO sai da tela
+
+A versão anterior desta seção mandava remover o campo, alegando que `Wallet.label`
+pertencia à §3. Estava errado: o campo **está desenhado neste frame** (`9:1238`,
+linha 3, coluna esquerda, ao lado do Avatar) e tem destino real.
+
+Como fica:
+
+- O campo carrega o `label` da carteira com `role: 'primary'` (`GET /api/wallets`).
+- O submit manda `PATCH /api/profile` **e**, se o apelido mudou,
+  `PATCH /api/wallets/{id da primária}`.
+- **Usuário sem carteira nenhuma**: o campo **não some** — renderiza desabilitado,
+  com texto explicando que é preciso cadastrar uma carteira antes e link para
+  `/carteiras`. Campo que some sem explicação é pior que campo desabilitado que se
+  explica.
+
+O layout correto da grade de campos, para não se perder de novo:
+
+| Linha | Esquerda | Direita |
+| --- | --- | --- |
+| 1 | Nome de exibição * | Nome de usuário * |
+| 2 | E-mail * | Nome ENS * (select `.eth` + input) |
+| 3 | Apelido da carteira * | Avatar |
 
 O e-mail permanece imutável porque o contrato o definiu assim na fase 1 e trocar
 e-mail sem reverificação seria inventar um fluxo que o desafio não pede.
