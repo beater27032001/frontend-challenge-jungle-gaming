@@ -665,13 +665,30 @@ a seção "Fase 8" no fim deste arquivo.
 
 **Abertas, sem bloquear ninguém**
 
-9. **Causa raiz do vazamento no logout não encontrada.** Dois investigadores
-   independentes (o agente da fase 5 e a coordenação) leram `use-auth.ts`,
-   `favorites.ts`, `use-session.ts` e a propagação de `scope` sem achar por que
-   alguns observadores da mesma query não recebem a notificação após
-   `queryClient.clear()`. O conserto em vigor — `clear()` + `location.reload()` —
-   **garante** o requisito eliminatório do §11; o custo é perder a suavidade de SPA
-   no logout. Vale investigar com calma depois da entrega.
+9. ~~**Causa raiz do vazamento no logout não encontrada.**~~ **RESOLVIDA.**
+
+   `queryClient.clear()` **remove as queries sem notificar quem as observa.**
+   Componente que não tenha outro motivo para re-renderizar segue pintando
+   estado derivado de uma query que já não existe. Era por isso que o Header
+   atualizava e os cards do catálogo não: o Header re-renderizava porque o
+   `isPending` da mutation de logout mudava; os cards não tinham gatilho algum.
+
+   **Como foi encontrada, depois de três hipóteses erradas** (plantar a sessão
+   nova, cancelar requisições em voo, suspeitar de refetch tardio): medindo o
+   cache e o DOM **no mesmo instante e na mesma largura**. As tentativas
+   anteriores mediam o cache em 1440 e o coração em 390, em execuções
+   diferentes — comparando dois estados que nunca coexistiram.
+
+   Medido junto, a resposta foi imediata: cache limpo, `session: null`, zero
+   queries de favoritos, **e um coração ainda `aria-pressed="true"` no DOM**.
+   Estado correto, tela suja — o que descarta rede e cache de uma vez e aponta
+   para notificação. É exatamente o erro que a seção "Verificação" descreve:
+   medir o instrumento em vez do sistema.
+
+   **Conserto:** `setQueryData(sessionKey, null)` + `resetQueries()`, que devolve
+   ao estado inicial **e notifica**, mais `navigate({ to: '/' })` do router. O
+   `location.href = '/'` que existia era contorno: recarregava a aplicação
+   inteira a cada logout. Agora é client-side, e a limitação some do README.
 10. **O "modal sobre o catálogo" não mantém a página de fundo montada.** O TanStack
     Router não tem intercepting routes; o retorno ao fluxo é por `redirect`. Atende
     o §3 funcionalmente, não visualmente.
