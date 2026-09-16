@@ -3,6 +3,12 @@
 Decisões e desvios da spec/design system que não são óbvios lendo o código.
 `CLAUDE.md` referencia este arquivo como a casa dessas entradas.
 
+> **Como citar uma decisão.** A numeração é **por seção**, não global: mais de uma
+> fase usa o mesmo número. Sempre qualifique com a fase — "fase 7, decisão 46" —
+> como os comentários de código já fazem. As fases 2 a 5 recomeçam em 1; as 6, 7 e
+> 9 continuam uma sequência herdada. Não renumerado de propósito: há referências
+> cruzadas em comentários de teste e de código que quebrariam.
+
 ## Fase 2 — Design system, dívidas de fixtures/E2E, shell de layout
 
 1. **768 é tratado como mobile.** O Figma não tem frame tablet. Spec §11
@@ -629,7 +635,8 @@ mutação na 52). Mantidas aqui por rastreabilidade.
    `order-timeout` é o mais importante — a recuperação por idempotência precisa
    devolver o **mesmo** pedido.
 
-**Bloqueiam a fase 8 (perfil + carteiras)**
+**Bloqueiam a fase 8 (perfil + carteiras)** — os três **fechados** na fase 8; ver
+a seção "Fase 8" no fim deste arquivo.
 
 6. **Estender o mock**, decidido pelo usuário (spec 08 §2.4 e §3.5): `Profile`
    ganha `username` (com 409 em colisão) e `ensName`; `Wallet` ganha `type` (enum
@@ -986,3 +993,131 @@ como "Bloqueiam a fase 7" foram fechadas; o que abriu de novo está no fim.
 - **`pnpm-lock.yaml` foi regenerado**: `@mswjs/socket.io-binding` estava em
   `dependencies` no `package.json` e em `devDependencies` no lock (inconsistência
   herdada da fase 9). Correção mecânica do `pnpm install`, nenhuma versão mudou.
+## Fase 8 — Perfil do colecionador e carteiras
+
+Fecha as dívidas 6, 7 e 8 da seção "Dívidas para as fases 7 e 8". Spec:
+`specs/08-perfil-carteiras.md`.
+
+38. **Uma feature (`src/features/account/`) para as duas telas, não duas.** O
+    `CLAUDE.md` prevê `profile` e `wallets` separadas, mas o Figma desenha UM
+    layout: a mesma Account Sidebar de 310px (nodes `70420:4536` e
+    `70420:4594`) com um painel diferente à direita. Perfil e carteiras
+    dividem escopo de cache, primitivos de campo e shell — separá-los criaria
+    um import cruzado entre features para cada um desses três. A sidebar em si
+    é `src/components/account-sidebar.tsx`, que é onde o `CLAUDE.md` põe o que
+    é compartilhado entre features.
+
+39. **O mock ganhou quatro campos, decisão do usuário (spec §2.4 e §3.5).**
+    `Profile.username` (único, **409** com `details.username` em colisão, como
+    o endereço de carteira já fazia) e `Profile.ensName`; `Wallet.type` (enum
+    `metamask`/`walletconnect`/`coinbase`, derivado do que o pagamento mobile
+    oferece) e `Wallet.referralCode` (opcional). `SEED_VERSION` foi para 6 —
+    sem o bump, um `localStorage` da fase anterior serviria perfil sem esses
+    campos.
+
+40. **`type` é obrigatório no `walletSchema`, e isso mudou três testes de
+    contrato existentes.** O Figma marca o campo com asterisco e o §3.5 lista
+    só `referralCode` como opcional. Consequência honesta: os três `POST
+    /api/wallets` que já existiam em `e2e/api-contracts.spec.ts` passaram a
+    mandar `type: 'metamask'`. Nenhuma asserção foi afrouxada — só o corpo da
+    requisição acompanhou o contrato novo.
+
+41. **`updateProfileSchema.avatarUrl` deixou de ser `.url()`.** Os avatares do
+    mock são caminhos locais (`/nft/ape-01.webp`, fase 1) e o botão "Alterar"
+    grava a imagem escolhida como `data:` URL — `.url()` recusava os dois, o
+    que fazia **todo** PATCH de perfil voltar 400. Passou a aceitar caminho
+    absoluto, `http(s)` ou `data:image/`, e `''` para limpar (o "Remover" do
+    §2.1). O limite de 512 KB da imagem é do cliente, não do Figma: um data
+    URL maior estouraria a cota do `localStorage` que serve de db, e a tela
+    perderia estado que já parecia salvo.
+
+42. **`DELETE /api/wallets/:id` com quatro regras** (spec §3.5): 404 para
+    inexistente ou de outro dono (a lista é indexada por dono, então o
+    isolamento sai de graça); **409** ao remover a única primária — sem
+    primária o pagamento perde a carteira selecionada; promoção da secundária
+    **mais antiga** quando existe; `persist()` ao fim. O 204 **não** nomeia a
+    promovida: o cliente já tem a lista anterior em cache e a mesma regra, e
+    inventar corpo num 204 divergiria do contrato dos outros DELETEs. O aviso
+    de quem foi promovida (e de quem foi rebaixada, no `POST`/`PATCH` com
+    `role: 'primary'`) sai de `src/features/account/mutations.ts` — promoção e
+    rebaixamento silenciosos eram a armadilha que o spec pede para evitar.
+
+43. **Rotas privadas de verdade, pelo router.** `/perfil` e `/carteiras` têm
+    `beforeLoad` com `queryClient.ensureQueryData(sessionOptions)` e
+    `throw redirect({ to: '/login', search: { redirect } })` — a proteção de
+    fluxo privado que o §4 do desafio pede, no router e não no componente.
+    `sessionOptions` foi extraído de `use-session.ts` para que a rota e o hook
+    leiam a MESMA query, sem um segundo caminho de leitura de sessão.
+
+44. **Um formulário e um "Salvar" no perfil.** O Figma desenha o botão
+    **depois** do bloco "Alterar senha" (§2.3), então o submit faz `PATCH
+    /profile` sempre e `POST /profile/password` só quando algum dos três
+    campos de senha foi preenchido — os três se tornam obrigatórios entre si
+    nesse caso. Dois botões seriam desenho que o arquivo não tem.
+
+45. **O asterisco de obrigatório fica FORA do `<label>`.** Dentro dele, o nome
+    acessível do campo virava "Nome de exibição*" — `aria-hidden` não remove o
+    glifo do texto do label, e nenhum `getByLabel` exato casava. A
+    obrigatoriedade viaja por `aria-required` no input; o asterisco é só a
+    marca visual. Pego pelo teste, não suposto.
+
+46. **O menu `⋮` não é um menu ARIA: é um disclosure no fluxo.** `⋮` com
+    `aria-expanded`/`aria-controls` abre um painel de três botões (Definir como
+    principal · Editar · Remover) **dentro** do card, empurrando o layout.
+    Começou absoluto e sobreposto, como no Figma; no mobile caía sob a TabBar
+    fixa de 126px e ficava inclicável — de novo, pego pelo teste. No fluxo, a
+    página cresce e rola. Custo: não é o popover do desenho.
+
+47. **Campos do Figma que saíram da tela de carteiras.** "Nome de exibição",
+    "Nome do perfil", "E-mail" e "Nome ENS" são de perfil, duplicados na tela
+    errada (§3.5). Saiu também o **input sem label da Field Row 3**
+    (placeholder "ENS ou carteira secundária (opcional)"): o §3.5 não lhe dá
+    destino no contrato, e campo que o usuário preenche e a API ignora é
+    proibido pela regra 5 — decisão minha, não do spec. `referralCode` é
+    renderizado **sem** asterisco, ao contrário do Figma, porque obrigatório
+    trancaria quem não tem código. Pelo mesmo argumento, **"Nome ENS" também
+    perdeu o asterisco**: exigir um domínio ENS trancaria quem não tem um, e
+    asterisco que o formulário não cobra é mentira de UI. Esse segundo caso é
+    decisão minha, não do spec.
+
+48. **"Igual à carteira principal" é um checkbox com estado, não enfeite.**
+    Marcado, copia rede, tipo e código da principal para o formulário da
+    secundária; desmarcado, limpa. O **endereço não é copiado** — dois
+    registros com o mesmo endereço é exatamente o 409 do `POST`.
+
+49. **Os cinco itens de menu sem tela** (Atividade, Lista de interesse,
+    Ofertas, Arquivos baixados, Suporte, decisão do usuário no §1) são
+    `<span aria-disabled="true" title="Em breve">`, nunca `<a>`/`<Link>`: link
+    para rota inexistente devolve 404, e "ação fora do escopo não deve
+    aparentar sucesso funcional" (CHALLENGE §3). O item ativo da sidebar é só
+    a barra de 6px no Figma — todos os rótulos já são `text-accent` —, então
+    `aria-current="page"` é o que carrega o estado, e o teste cobra o caso
+    negativo junto do positivo.
+
+50. **`--color-text-coral` (#f0805f) existia em `src/index.css` desde a fase 2
+    mas não constava da paleta do `CLAUDE.md`.** É o asterisco de obrigatório
+    dos 19 campos destas duas telas; acrescentado lá.
+
+### Desvio consciente: nenhuma das duas telas tem frame mobile
+
+O Figma só desenha desktop (`9:1238` e `9:1670`). As cinco derivações do spec
+§5, com o frame de origem de cada uma:
+
+1. **Sidebar vira faixa de navegação no topo**, com rolagem horizontal dentro
+   do próprio container (`overflow-x-auto`) — não drawer, porque o mobile desta
+   base nunca teve um (decisões 1–2). A quebra é em `md` (768): abaixo disso a
+   sidebar é faixa, acima é a coluna de 310. Origem: §5.1 do spec.
+2. **Campos de 417 viram fluidos** (`w-full md:max-w-[417px]`) e as linhas de
+   dois campos empilham. Origem: padrão dos frames mobile de 414 com margem 28
+   (conteúdo 358), fases 3/4/6.
+3. **Screen Header** com círculo de voltar 35×35 + título 20px bold, igual ao
+   do carrinho mobile (`16:360`) e do detalhe (`15:5536`).
+4. **CTA mobile** de largura total, `h-60`, raio 40, gradiente
+   `108.5deg #d28a4c → rgba(210,138,76,0.8)`; o `131×40` raio 3 do desktop
+   volta em `md`. Origem: `16:360`/`15:5536` — o botão mobile não é o desktop
+   reescalado, lição das fases anteriores.
+5. **Campo ENS composto** mantém os 78px do domínio e deixa o resto fluido.
+
+O `<select>` do domínio ENS tem uma opção só (`.eth`): é o único TLD do
+arquivo. É um select de verdade porque o Figma desenha a seta — não uma caixa
+decorativa.

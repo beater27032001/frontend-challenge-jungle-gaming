@@ -46,6 +46,11 @@ export const auth = [
       const user = {
         id,
         name: body.name,
+        // Fase 8: `username` é único (o PATCH do perfil devolve 409 em
+        // colisão), então o valor inicial precisa nascer único também — a
+        // parte local do e-mail, que já é único, e não o nome digitado.
+        username: body.email.split('@')[0].slice(0, 24),
+        ensName: '',
         email: body.email,
         avatarUrl: '/nft/ape-01.webp', // local asset, spec §5
         bio: '',
