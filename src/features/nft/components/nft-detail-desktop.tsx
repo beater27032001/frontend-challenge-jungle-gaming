@@ -22,6 +22,8 @@ export function NftDetailDesktop(props: NftDetailViewProps) {
     onSelectImage,
     onBuy,
     isBuying,
+    isFavorited,
+    onToggleFavorite,
   } = props
   const [zoomOpen, setZoomOpen] = useState(false)
 
@@ -216,11 +218,12 @@ export function NftDetailDesktop(props: NftDetailViewProps) {
 
                 <button
                   type="button"
-                  disabled
+                  onClick={onToggleFavorite}
                   aria-label="Favoritar"
-                  className="flex h-10 w-[130px] items-center justify-center gap-[8px] rounded-[6px] border border-primary text-body-14 font-medium text-text-accent disabled:opacity-50"
+                  aria-pressed={isFavorited}
+                  className="flex h-10 w-[130px] items-center justify-center gap-[8px] rounded-[6px] border border-primary text-body-14 font-medium text-text-accent"
                 >
-                  <Heart aria-hidden className="size-5" />
+                  <Heart aria-hidden fill={isFavorited ? 'currentColor' : 'none'} className="size-5" />
                   Favoritar
                 </button>
 
