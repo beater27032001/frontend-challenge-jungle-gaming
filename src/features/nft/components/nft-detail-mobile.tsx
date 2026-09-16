@@ -110,6 +110,10 @@ export function NftDetailMobile(props: NftDetailViewProps) {
         <h1 className="text-title-20 leading-[16px] font-bold text-foreground">{nft.title}</h1>
 
         <div
+          // `role="img"`: aria-label em <div> sem role e ignorado por
+          // leitor de tela e reprovado como aria-prohibited-attr. A fileira
+          // de estrelas E uma imagem de texto — role img e o papel correto.
+          role="img"
           aria-label={`Avaliação: ${nft.ratingAvg} de 5, ${nft.ratingCount} avaliações`}
           className="flex h-[27px] w-fit items-center gap-1 rounded-[32px] border border-primary px-3"
         >
@@ -202,7 +206,7 @@ export function NftDetailMobile(props: NftDetailViewProps) {
             // a geometria medida (196x60) fica, o padding sai.
             className="flex h-[60px] w-[196px] items-center justify-center rounded-[40px] text-body-16 font-bold leading-[20px] whitespace-nowrap text-ink disabled:opacity-50"
             style={{
-              background: 'linear-gradient(100.37deg, #d28a4c 3.96%, rgba(210,138,76,0.8) 121.97%)',
+              background: 'linear-gradient(100.37deg, var(--color-primary) 3.96%, color-mix(in srgb, var(--color-primary) 80%, transparent) 121.97%)',
             }}
           >
             Comprar NFT

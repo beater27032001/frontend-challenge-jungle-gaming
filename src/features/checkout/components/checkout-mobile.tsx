@@ -12,7 +12,7 @@ import { RadioDot } from './checkout-desktop'
  * carrinho mobile (108.86deg). Tailwind não expressa o par de stops com
  * opacidade, então vai por `style`, como no carrinho. */
 const CONFIRM_GRADIENT = {
-  background: 'linear-gradient(108.48deg, #d28a4c 3.96%, rgba(210,138,76,0.8) 121.97%)',
+  background: 'linear-gradient(108.48deg, var(--color-primary) 3.96%, color-mix(in srgb, var(--color-primary) 80%, transparent) 121.97%)',
 } as const
 
 /**
