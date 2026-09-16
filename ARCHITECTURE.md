@@ -403,6 +403,169 @@ por ele mesmo
     não é.
 
 
+## Fase 5 — Conta e sessão
+
+**Nota de processo**: a primeira passada desta fase foi escrita contra uma
+extração incompleta do Figma (`specs/05-auth.md` só tinha a seção 1–6, e as
+"Open Questions" do spec do Coder derivaram cadastro/mobile por presunção sob
+prazo). No meio da implementação, `specs/05-auth.md` ganhou as seções 7–9 com
+o cadastro desktop e os dois frames mobile REALMENTE extraídos — e a extração
+contradiz a presunção em dois pontos estruturais: **mobile não é o modal
+encolhido, é rota própria de tela cheia**, e o modal desktop tem outro raio
+(8, não 5) e outro subtítulo por aba. A implementação foi refeita em cima da
+extração real; as decisões abaixo já refletem essa versão final, não a
+presunção original.
+
+1. **`/login` e `/cadastro` são rotas reais, não search param.** O Figma
+   mobile prova isso: login/cadastro no mobile são páginas cheias com o
+   próprio logo/título, não um modal encolhido (specs/05-auth.md §8, item que
+   contradiz a seção 1 do próprio spec). Uma rota por tela, duas composições
+   por breakpoint (`hidden lg:*`/`lg:hidden`, mesmo padrão de
+   `nft.$nftId.tsx`) — não dois mecanismos. `redirect` (query string,
+   validada com `.catch(undefined)` se não começar com `/`) carrega a página
+   de origem: header, coração de favorito e o interceptor de sessão expirada
+   todos passam o `pathname` atual: é o "retorno ao fluxo anterior" (§3) via
+   navegação real, em vez de um param que some.
+
+2. **Compromisso registrado (bloco grande demais para a versão "modal
+   literalmente sobre o catálogo montado"): o desktop não mantém a página de
+   fundo montada por trás do Dialog.** O Figma pede o catálogo visível atrás
+   do overlay; construir isso de verdade exigiria rotas paralelas/
+   intercepting routes (Next.js tem; TanStack Router não tem esse mecanismo
+   nativo) — fora do orçamento desta fase sob prazo. A composição desktop
+   usa o `Dialog` do Radix (focus trap/Esc de graça) centrado num overlay
+   escuro; ao fechar ou concluir o form, navega para `redirect` (a página
+   real de origem) via navegação de verdade, o que entrega o "retorno ao
+   fluxo anterior" funcionalmente (a URL/estado da página de origem volta
+   exatos) sem o efeito visual de camadas. Header/Footer continuam
+   renderizando por trás (o `__root__` não os esconde nesta rota), o que
+   aproxima visualmente sem ser literal.
+
+3. **Dialog só monta em `>=lg` via JS (`useMediaQuery`), não só CSS.** Radix
+   Portal escapa da hierarquia do DOM: um `hidden lg:block` no wrapper NÃO
+   escondia o conteúdo do Dialog em telas menores (o portal insere direto em
+   `document.body`), e mesmo escondendo por CSS puro (`className` no próprio
+   painel) o *overlay* e o *focus trap* continuavam ativos, roubando o foco
+   da tela mobile por trás. `src/lib/use-media-query.ts` (hook novo,
+   `window.matchMedia`) só monta `<Dialog>` quando `min-width: 1024px` bate;
+   abaixo disso `LoginDesktop`/`RegisterDesktop` retornam `null` e
+   `LoginMobile`/`RegisterMobile` (página comum, sem Dialog) são o que
+   existe no DOM.
+
+4. **Confirmar senha é campo client-only.** O Figma pede "Confirmar senha"
+   nos dois formulários de cadastro (specs/05-auth.md §7.1/§8.4) mas
+   `registerSchema` (contrato da API) não tem esse campo. `registerFormSchema`
+   (`auth-schemas.ts`) estende `registerSchema` com `confirmPassword` + um
+   `refine` (senhas iguais) só para validação local; `register.mutate` recebe
+   só `{ name, email, password }` — o campo nunca sai do browser.
+
+5. **Toggle de olho nos dois campos de senha, nas duas superfícies.** O
+   Figma é assimétrico (só "Senha" tem o olho no modal desktop; os dois
+   campos têm no mobile — specs/05-auth.md §7.1 vs §8.4, e o próprio spec
+   recomenda unificar). Resolvido a favor de dar o toggle a todo campo de
+   senha: esconder "Confirmar senha" sem poder revelá-lo é hostil, e o
+   Figma mobile já faz assim.
+
+6. **Dois erros do Figma corrigidos, não copiados** (specs/05-auth.md §8.4,
+   item 9 de "Consequências"): o placeholder do primeiro campo do cadastro
+   mobile estava em inglês ("User Name") e centralizado (`x 115.5` contra
+   `x 16` dos outros três) — usa "Nome de usuário" com o mesmo `pl-16` dos
+   demais, igual ao modal desktop já fazia.
+
+7. **A faixa de 10px do rodapé existe só no login desktop.** O node do
+   cadastro desktop (`9:1230`, `y 646`) está fora dos 600px do modal — sobra
+   de composição, não um elemento intencional (specs/05-auth.md §7.4).
+   Incluída só no login (onde `top: 590` fecha exatamente nos 600px);
+   incluir também no cadastro criaria uma assimetria que o próprio Figma não
+   desenhou.
+
+8. **Dois conjuntos de primitivos de input, não um** (specs/05-auth.md §9):
+   desktop `h-40`/raio `5`/`px-16 py-12`; mobile `h-50`/raio `10`/`pl-16`. O
+   raio do **shell** do modal é `8` (não 5 — a presunção original errou essa
+   medida, só tinha certeza do raio do input). CTA desktop `h-45`/raio `5`;
+   CTA mobile `358×60`/raio `10` — **raio 10 e cor plana**, nunca confundir
+   com o CTA-pílula (raio 40 + gradiente) do carrinho/pagamento (specs
+   06/07), são componentes de propósito diferente.
+
+9. **Cópia difere por breakpoint no cadastro**: desktop chama o CTA
+   "Criar conta" (specs/05-auth.md §7.2); mobile chama "Criar perfil" e o
+   título é "Criar perfil de colecionador" (§8.3/§8.5) — não normalizar para
+   o mesmo texto nas duas composições, é o que o Figma mostra.
+
+10. **`--text-title-20-medium` não empacota o peso 500.** Nenhuma escala
+    existente empacota `font-weight` (só tamanho, e às vezes `line-height`
+    via companion `--line-height`) — o peso sempre foi aplicado por
+    `font-medium`/`font-bold` no call-site. O token novo carrega tamanho
+    (20px) + `line-height` (16px); `font-medium` vem da classe Tailwind no
+    call-site (`auth-desktop.tsx`). Note que o mobile usa 20px **bold** no
+    título (§8.3) — token diferente, não reaproveitar este aqui.
+
+11. **`getRouteApi('__root__')` em vez de `useNavigate({ from: '__root__' })`.**
+    TanStack Router recusa `'__root__'` como `FromPathOption` de
+    `useNavigate` (erro de tipo) — `getRouteApi('__root__').useNavigate()`,
+    chamado fora do arquivo da rota (header, card mobile), é o padrão oficial
+    da lib para o mesmo resultado tipado quando o componente está montado em
+    toda rota. Em `main.tsx`, fora de qualquer componente React, não há hook
+    disponível: `router.navigate({ to: '/login', search: { redirect } })`
+    com `to` explícito.
+
+12. **Honestidade sem backend (§3, mesma regra da newsletter/fase 2):**
+    Google, Facebook (ícones genéricos `Globe`/`ThumbsUp` do lucide, mesmo
+    precedente dos ícones sociais do footer — a marca não tem glifo próprio
+    na lib) e "Esqueceu a senha?" são `disabled`, com `title` explicando a
+    ausência de backend. Nenhum dos três chama `/auth/*` nem finge sucesso.
+
+13. **Logout não existe no mobile nesta fase (dívida da fase 8).** Sem
+    header mobile e sem tela de Perfil até a fase 8, não há entrada de
+    logout em `< lg`. Um usuário que logar no mobile permanece logado até
+    limpar cookies manualmente ou voltar ao desktop — aceito, registrado
+    como dívida (mesma decisão do plano, "Out of scope" do spec 05).
+
+14. **Guard de rota (`beforeLoad`) não nasce nesta fase.** Não existe rota
+    privada ainda — checkout (7) e perfil/carteiras (8) não têm rota, e
+    favoritos não têm página própria no Figma. O que a fase 5 protege,
+    protege na interação (coração/Favoritar → navega para `/login`). O guard
+    nasce com a primeira rota privada, ~5 linhas usando o mesmo `redirect`.
+
+15. **Logout faz `queryClient.clear()` + `window.location.reload()`, não só
+    `clear()`.** Investigação ao vivo (Playwright + `window.__debug*` ad-hoc)
+    achou um caso real de vazamento pós-logout: o coração do card de
+    catálogo (cada card com seu próprio `useSession()`) continuava mostrando
+    o favorito de Ana depois de "Sair", enquanto o Header (também
+    `useSession()`, um único consumidor) atualizava corretamente para
+    "Entrar" no mesmo instante. Instrumentado (push de `scope`/`session.data`
+    a cada render): o Header recebeu a notificação de `clear()`
+    (5 renders, o último com `hasData:false`); o `HomePage` da rota `/`
+    (dono da query de favoritos/lista do card) **parou de renderizar
+    completamente** depois do clique em "Sair" — 4 renders, todos ainda
+    com `scope:'u-ana'`, nenhum depois. Confirmei que não é timing (esperei
+    a resposta do `PUT /favorites` assentar antes do logout) nem cookie
+    (`fetch` manual pós-logout confirma 401 correto). Não achei a causa raiz
+    de por que dois consumidores da MESMA query React Query reagem diferente
+    a um `clear()` — sob prazo, a correção mais simples e a que o §11
+    exige (eliminatório) é forçar um reload completo: garante estado
+    zerado para QUALQUER componente, não depende de nenhum observador
+    específico reagir corretamente. Login/registro continuam client-side
+    (sem reload) porque ali `queryClient.setQueryData(sessionKey, session)`
+    já prova, testado, que todo consumidor assenta. **Dívida para quem
+    revisitar**: reproduzir isolado (sem Playwright) e abrir uma issue no
+    TanStack Query se for bug da lib, ou achar o componente/memo que está
+    engolindo a notificação se for erro nosso.
+16. **"Limpar subscriptions" no logout está vazio até o Socket.IO nascer**
+    (fase 6/7). `queryClient.clear()` já cobre 100% do cache (privado e
+    público — é a garantia de zero vazamento entre usuários, §11); quando o
+    socket nascer, o `disconnect()` entra na mesma rotina de higiene
+    (`onSuccess` de `useLogin`/`useRegister`/`useLogout`), não em um lugar
+    novo.
+
+17. **Debounce do interceptor de `session_expired` é por tempo (300ms), não
+    por promise.** Várias queries em voo resolvem em tasks separadas, não no
+    mesmo microtask — um `queueMicrotask` resetaria a flag antes da segunda
+    resposta chegar e disparar dois toasts/duas navegações. 300ms cobre a
+    rajada real (queries lançadas juntas no boot ou ao trocar de tela) sem
+    represar um segundo evento genuíno depois de relogar.
+
+
 ## Limitação conhecida — flake residual na suíte E2E
 
 Para quem avalia: `pnpm test` roda 380 testes em desktop 1440 e mobile 390, e
@@ -417,3 +580,13 @@ sob carga. Rodar com `--workers=1` passa de forma consistente.
 
 Não foi perseguido até 100% por decisão consciente de prazo. O conserto é
 one-liner: asserir só o piso da latência, que é o que o teste de fato prova.
+
+**Fase 5 (novo, mesma família):** `e2e/runtime-behavior.spec.ts` — "Favoritos
+otimistas... cenário server-error" assere `aria-pressed` passando por `true`
+(otimista) e depois `false` (rollback) em sequência — uma rodada sob o
+paralelismo pesado da suíte inteira (4 workers, 408 testes) perdeu a leitura
+do `true` porque o rollback já tinha acontecido antes do primeiro poll do
+`expect`. Passou de forma consistente em 4 rodadas isoladas (grep escopado a
+"fase 5", sem o resto da suíte competindo por CPU). Mesma classe de flake dos
+itens acima — tolerância de tempo apertada, não lógica de app errada.
+Registrado, não perseguido, pela mesma decisão de prazo.
