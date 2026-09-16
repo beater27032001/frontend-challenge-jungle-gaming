@@ -1,4 +1,9 @@
-# GreenMint — Marketplace de NFTs
+# KURIO — Marketplace de NFTs
+
+> O produto se chama **KURIO**, como o wordmark do Figma mostra. "GreenMint" foi o
+> nome interno da fase 0, antes de a identidade ser extraída do arquivo de design, e
+> sobreviveu só em identificadores internos: os e-mails das fixtures (`@greenmint.dev`)
+> e as chaves de `localStorage` (`greenmint:db:v1`). Nada que o usuário vê diz GreenMint.
 
 Resposta ao desafio em `docs/CHALLENGE.md`. **Leia o desafio antes de propor qualquer coisa:**
 ele é a especificação, este arquivo é como a construímos.
@@ -88,7 +93,7 @@ O raio de borda (`--radius`) é provisório: calibre por tela com `get_design_co
 ```
 src/
   routes/      rotas file-based do TanStack Router (routeTree.gen.ts é gerado)
-  features/    um diretório por domínio: nft, cart, auth, checkout, profile, wallets
+  features/    um diretório por domínio: nft, cart, auth, checkout, account, realtime
   components/  ui/ = shadcn adaptado; resto = compartilhado entre features
   lib/         api.ts (axios), query.ts (queryClient), utils.ts, money, socket
   mocks/       MSW: handlers, db, fixtures, cenários, binding socket.io
@@ -175,5 +180,10 @@ criar um gate, force-o a falhar uma vez para provar que ele acusa.
 
 ## Dívidas
 
-`ARCHITECTURE.md`, seção "Dívidas para a fase N" — 11 itens abertos para a fase 4.
+As 12 fases foram entregues. O `ARCHITECTURE.md` mantém o registro por fase e as
+limitações conhecidas; o README traz as mesmas limitações em linguagem de usuário.
+
+Dívidas ainda abertas na entrega: recalibrar com o Figma as duas seções do fim da
+home (medidas por captura, porque a cota do MCP estourou) e a numeração de decisões
+do `ARCHITECTURE.md`, que colide entre fases.
 Registro em `.pipeline/` não serve: a fase seguinte sobrescreve.

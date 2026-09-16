@@ -45,10 +45,10 @@ no build de demonstração.
 | --- | --- | --- |
 | `VITE_ENABLE_MSW` | `true` | Liga a camada de mocks. É o único interruptor: `src/mocks/index.ts` lê `import.meta.env.VITE_ENABLE_MSW !== 'false'`. Só com `false` o app passa a falar com um backend real. |
 | `VITE_API_BASE_URL` | `/api` | Base do Axios (`src/lib/api.ts`). Relativa de propósito, para o service worker do MSW interceptar igual em dev, preview e deploy. |
-| `VITE_SOCKET_URL` | `/` | Endpoint do Socket.IO servido pelo binding MSW (`@mswjs/socket.io-binding`). |
+| `VITE_SOCKET_URL` | `/` | Declarada em `.env.example`, mas **nenhum código a lê hoje**: `src/lib/socket.ts` conecta em `window.location.origin` com `path: '/socket.io/'`, que é onde o binding MSW (`@mswjs/socket.io-binding`) intercepta. Fica como ponto de extensão para o dia em que houver um servidor Socket.IO separado. |
 
 Os mocks são **ativados por configuração e vão ligados no build de demonstração**, como o §6
-do desafio exige: são carregados por `import()` dinâmico, então o bundle do MSW (~400 kB)
+do desafio exige: são carregados por `import()` dinâmico, então o bundle do MSW (**446 KB**, 164 KB gzip — medido em set/2026)
 fica fora do chunk principal e nem é baixado quando `VITE_ENABLE_MSW=false`.
 
 ## Credenciais fictícias
@@ -244,8 +244,9 @@ sempre de `POST /api/quote` — nunca de cálculo local.
    você recotar. É o passo 4 do cenário obrigatório do §7 do desafio.
 
 Para ver o aviso chegar **em tempo real**, sem recarregar, deixe `/pagamento` aberto e rode
-`window.__mocks.realtime.editNftPrice('nft-003', '2.5')` noutra aba do console: o evento
-`nft.updated` invalida a cotação e o confirmar trava sozinho.
+`window.__mocks.realtime.editNftPrice('nft-003', '2.5')` no console **desta mesma aba** (o
+binding do MSW roda no contexto da página, então evento de outra aba não chega aqui): o
+evento `nft.updated` invalida a cotação e o confirmar trava sozinho.
 
 ### Edição esgotada durante a compra — `sold-out`
 
@@ -275,8 +276,12 @@ vira confirmação.
 
 **Repare no carrinho depois:** os itens voltam, e o estoque também. A criação debita de
 imediato (reserva otimista, que é o que impede dois pedidos concorrentes de levarem a mesma
-edição), mas recusa é terminal e estorna — o §3 exige preservar os itens em falha. Se o
-catálogo estiver aberto noutra aba, o estoque volta lá em tempo real, via `nft.updated`.
+edição), mas recusa é terminal e estorna — o §3 exige preservar os itens em falha. Com o
+catálogo aberto **na mesma aba** (outra rota, ou o carrossel de relacionados), o estoque
+volta sozinho via `nft.updated`, sem recarregar. Entre **abas** não funciona, e isso é
+limitação do transporte, não do estorno: "servidor" e "cliente" compartilham o contexto da
+página no binding do MSW, então uma aba nunca vê evento de outra (`ARCHITECTURE.md`,
+"Limitações do transporte no ambiente de mocks").
 
 ## Comandos
 
@@ -327,9 +332,12 @@ parâmetros da consulta. Nenhum dado fictício vive fora de `src/mocks/`.
 
 Registro honesto; o detalhamento de cada decisão está em `ARCHITECTURE.md`.
 
-- **Rode a suíte com `--workers=1`.** São **564 testes** (desktop 1440 + mobile 390), e a
-  última rodada completa deu **556 passed · 8 skipped · 0 failed**. Os 8 pulados são
-  específicos de um breakpoint — geometria que só existe no frame mobile, por exemplo.
+- **Rode a suíte com `--workers=1`.** São **566 testes** (desktop 1440 + mobile 390,
+  conferido com `npx playwright test --list`). A última rodada completa registrada deu
+  **556 passed · 8 skipped · 0 failed** — ela mediu 564 testes, antes de o gate de
+  contraste (`runtime-behavior.spec.ts`, commit `54ae92e`) entrar; os 2 testes que ele
+  acrescenta não foram cobertos por uma rodada completa. Os 8 pulados são específicos de
+  um breakpoint — geometria que só existe no frame mobile, por exemplo.
 
   Com paralelismo alto em máquina carregada, o `vite preview` é morto por pressão de memória
   (`Killed: 9`) e **todo** teste falha em seguida com `net::ERR_CONNECTION_REFUSED`. Isso não
@@ -340,13 +348,14 @@ Registro honesto; o detalhamento de cada decisão está em `ARCHITECTURE.md`.
   só em desktop): `boot()` resolve quando o MSW responde, não quando o React montou o header.
   Caracterizado, não perseguido. Detalhes em `ARCHITECTURE.md`, "Limitação conhecida".
 
-- **Regressão visual: 14 baselines, e dois pontos cegos conhecidos.** `e2e/visual.spec.ts`
-  cobre início, detalhe, login, carrinho, pagamento, perfil e carteiras em 1440 e 390. O gate
-  foi provado por mutação (trocar `--color-primary` de `#d28a4c` para `#4c8ad2`): **12 das 14
-  acusaram**. As duas que não acusaram — carrinho e pagamento no mobile — passam porque o CTA
-  dessas composições **fixa `#d28a4c` num gradiente inline** em vez de usar o token
-  (`cart-mobile.tsx`, `checkout-mobile.tsx`, `nft-detail-mobile.tsx`, `account/fields.tsx`).
-  A baseline está certa; é o token que está furado.
+- **Regressão visual: 14 baselines.** `e2e/visual.spec.ts` cobre início, detalhe, login,
+  carrinho, pagamento, perfil e carteiras em 1440 e 390. O gate foi provado por mutação
+  (trocar `--color-primary` de `#d28a4c` para `#4c8ad2`): na primeira medição **12 das 14
+  acusaram**, e as duas que escaparam — carrinho e pagamento no mobile — escapavam porque o
+  CTA dessas composições **fixava `#d28a4c` num gradiente inline** em vez de usar o token.
+  Eram seis pontos assim, em cinco arquivos; todos passaram a usar `var(--color-primary)`
+  (commit `491c0fc`) e a mutação agora é acusada por **14 das 14**. O ponto cego era do
+  token, não do gate, e está fechado.
 - **Lighthouse mede o app com o MSW dentro.** Os números de `docs/lighthouse.md` são de um
   bundle que carrega service worker, handlers e fixtures em produção, porque a demo não tem
   backend. Mobile fica na casa dos **80** por causa disso; desktop, 95–99. O run de `/perfil`

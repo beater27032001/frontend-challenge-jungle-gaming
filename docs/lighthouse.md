@@ -34,7 +34,7 @@ Playwright quando não há Chrome instalado; `LH_PORT` muda a porta.
 ## Limitações da medição
 
 - **O MSW vai para produção por design.** O bundle inclui `mockServiceWorker` +
-  handlers + fixtures (`browser-*.js`, ~456 KB / 169 KB gzip) porque a demo não
+  handlers + fixtures (`browser-*.js`, **446 KB / 164 KB gzip** — medido; o valor varia alguns KB entre builds) porque a demo não
   tem backend. É o maior peso do JS não usado no primeiro paint e a maior parte
   da distância para 100 em mobile. Explicação, não desculpa: sem essa camada o
   app não funciona no deploy.
