@@ -551,7 +551,7 @@ test.describe('Shell — mobile composition (<1024, spec §10/§11)', () => {
     })
   }
 
-  test('Home is aria-current + non-chromatic dot indicator; the other 3 items have neither and are out of tab order (criterion 17)', async ({
+  test('Home is aria-current + non-chromatic dot indicator; Favoritos/FAB stay disabled and the other links carry neither (criterion 17)', async ({
     page,
   }) => {
     await page.setViewportSize({ width: 390, height: 844 })
@@ -567,18 +567,21 @@ test.describe('Shell — mobile composition (<1024, spec §10/§11)', () => {
     // state is never color-only (ARCHITECTURE.md decision 4).
     await expect(home.locator('span[aria-hidden]')).toHaveCount(1)
 
-    for (const label of ['Favoritos', 'Perfil']) {
-      const btn = page.getByRole('button', { name: label })
-      await expect(btn).toBeDisabled()
-      await expect(btn).not.toHaveAttribute('aria-current', 'page')
-      await expect(btn.locator('span[aria-hidden]')).toHaveCount(0)
-    }
+    // Favoritos continua sem tela (fase 4 não ligou): botão desabilitado.
+    const favoritos = page.getByRole('button', { name: 'Favoritos' })
+    await expect(favoritos).toBeDisabled()
+    await expect(favoritos).not.toHaveAttribute('aria-current', 'page')
+    await expect(favoritos.locator('span[aria-hidden]')).toHaveCount(0)
 
-    // Carrinho (fase 6) é link, e em `/` não é o item ativo: sem
-    // `aria-current` e sem o ponto indicador (o badge só nasce com contagem).
-    const cart = nav.locator('a[href="/carrinho"]')
-    await expect(cart).not.toHaveAttribute('aria-current', 'page')
-    await expect(cart.locator('span[aria-hidden]')).toHaveCount(0)
+    // Carrinho (fase 6) e Perfil (fase 8) são links, e em `/` nenhum dos dois
+    // é o item ativo: sem `aria-current` e sem o ponto indicador (o badge do
+    // carrinho só nasce com contagem).
+    for (const href of ['/carrinho', '/perfil']) {
+      const link = nav.locator(`a[href="${href}"]`)
+      await expect(link).toHaveCount(1)
+      await expect(link).not.toHaveAttribute('aria-current', 'page')
+      await expect(link.locator('span[aria-hidden]')).toHaveCount(0)
+    }
   })
 
   test('scrolled to the end at 390, the tab bar never covers the last content of <main> (padding-bottom 126px, criterion 18)', async ({
@@ -653,7 +656,7 @@ test.describe('Accessibility — keyboard navigation and focus (criterion 24)', 
     await expect(page.getByRole('button', { name: 'Buscar' })).toBeFocused()
   })
 
-  test('mobile: skip-link then the search bar controls are the next stops; Favoritos/Perfil/FAB stay disabled and out of tab order', async ({
+  test('mobile: skip-link then the search bar controls are the next stops; Favoritos/FAB stay disabled and out of tab order', async ({
     page,
   }) => {
     await page.setViewportSize({ width: 390, height: 844 })
@@ -676,15 +679,18 @@ test.describe('Accessibility — keyboard navigation and focus (criterion 24)', 
     await page.keyboard.press('Tab')
     await expect(page.getByRole('button', { name: 'Filtrar' })).toBeFocused()
 
-    // Favoritos/Perfil (tab bar) e o FAB seguem sem consumidor (fases 4/8):
-    // `disabled` já é suficiente para excluí-los da ordem de tabulação, sem
-    // precisar percorrer todo o catálogo até a tab bar. Carrinho saiu desta
-    // lista na fase 6 — agora é link e ESTÁ na ordem de tabulação, de
-    // propósito (o passeio por teclado do carrinho fica em e2e/cart.spec.ts).
-    for (const label of ['Favoritos', 'Perfil', 'Criar']) {
+    // Favoritos (tab bar) e o FAB seguem sem consumidor (fase 4): `disabled`
+    // já é suficiente para excluí-los da ordem de tabulação, sem precisar
+    // percorrer todo o catálogo até a tab bar. Carrinho saiu desta lista na
+    // fase 6 e Perfil na fase 8 — os dois são links e ESTÃO na ordem de
+    // tabulação, de propósito (o passeio por teclado de cada um fica em
+    // e2e/cart.spec.ts e e2e/account.spec.ts).
+    for (const label of ['Favoritos', 'Criar']) {
       await expect(page.getByRole('button', { name: label })).toBeDisabled()
     }
-    await expect(page.getByRole('navigation', { name: 'Navegação principal' }).locator('a[href="/carrinho"]')).toBeVisible()
+    const tabBar = page.getByRole('navigation', { name: 'Navegação principal' })
+    await expect(tabBar.locator('a[href="/carrinho"]')).toBeVisible()
+    await expect(tabBar.locator('a[href="/perfil"]')).toBeVisible()
   })
 })
 

@@ -72,7 +72,7 @@ Ficam em `src/index.css`, extraídos do Figma com `get_variable_defs`.
 Paleta: `ink #140d0a` (fundo) · `surface-card #241612` · `surface-dark #38220f` ·
 `border-strong #3f2319` · `border-soft #55321f` · `primary #d28a4c` ·
 `secondary #b39463` · `text-accent #e89b55` · `text-primary #f7f3ec` ·
-`text-secondary #cfb28c`
+`text-secondary #cfb28c` · `text-coral #f0805f` (asterisco de campo obrigatório)
 
 Tipografia: **Roboto Mono** (self-hosted via `@fontsource-variable`, exigência de
 execução local). Escala `text-tiny-9` … `text-display-43`.

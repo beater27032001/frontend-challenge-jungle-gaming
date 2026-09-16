@@ -43,7 +43,18 @@ function RootLayout() {
   //   342px no fundo; o frame tem Screen Header próprio.
   const isAuthRoute = pathname === '/login' || pathname === '/cadastro'
   const isCart = pathname === '/carrinho'
-  const isBareMobile = isNftDetail || isAuthRoute || isCart
+  // - `/pagamento` (fase 7, specs/07-checkout.md §6): Screen Header próprio e
+  //   Confirm Button como ÚLTIMO elemento da coluna — não é barra fixa, então
+  //   não paga `padding-bottom` de barra nenhuma.
+  const isCheckout = pathname === '/pagamento'
+  const isBareMobile = isNftDetail || isAuthRoute || isCart || isCheckout
+
+  // /perfil e /carteiras (fase 8, spec 08 §5.3) são um caso à parte: têm Screen
+  // Header próprio, então a MobileSearchBar sairia duplicada — mas a TabBar
+  // FICA, porque é por ela que se chega ao perfil, e estas telas não ocupam o
+  // fundo com folha nenhuma. Por isso um flag separado, e não mais um termo em
+  // `isBareMobile`.
+  const isAccount = pathname === '/perfil' || pathname === '/carteiras'
 
   // Fase 9: uma única conexão Socket.IO para o app inteiro, atrelada ao
   // escopo do usuário. Ver src/features/realtime/use-realtime.ts.
@@ -58,7 +69,7 @@ function RootLayout() {
         Pular para o conteúdo
       </a>
       <Header withDivider={!isNftDetail} />
-      {!isBareMobile && <MobileSearchBar />}
+      {!isBareMobile && !isAccount && <MobileSearchBar />}
       {/* pb-[126px] evita que a TabBar fixa encubra o fim do conteúdo em
           telas < lg (critério 18); some em lg, onde não há TabBar. Cada rota
           com composição própria paga o fundo que ela mesma ocupa: /carrinho
@@ -67,7 +78,7 @@ function RootLayout() {
       <main
         id="main"
         className={cn(
-          isCart ? 'pb-[358px]' : isNftDetail ? 'pb-[164px]' : isAuthRoute ? 'pb-0' : 'pb-[126px]',
+          isCart ? 'pb-[358px]' : isNftDetail ? 'pb-[164px]' : isAuthRoute || isCheckout ? 'pb-0' : 'pb-[126px]',
           'lg:pb-0',
         )}
       >
