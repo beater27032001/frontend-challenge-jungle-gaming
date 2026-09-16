@@ -151,6 +151,7 @@ export function Header({ withDivider = true }: { withDivider?: boolean }) {
               {cartCount > 0 && (
                 <span
                   aria-hidden
+                  data-testid="cart-count"
                   className="absolute -right-2 -top-2 flex size-4 items-center justify-center rounded-full bg-primary text-tiny-10 font-bold text-primary-foreground"
                 >
                   {cartCount}

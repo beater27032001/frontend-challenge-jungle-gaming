@@ -590,3 +590,134 @@ do `true` porque o rollback já tinha acontecido antes do primeiro poll do
 "fase 5", sem o resto da suíte competindo por CPU). Mesma classe de flake dos
 itens acima — tolerância de tempo apertada, não lógica de app errada.
 Registrado, não perseguido, pela mesma decisão de prazo.
+
+**Correção de diagnóstico (fase 9).** O parágrafo acima explica o flake de *uma
+ou duas* falhas por rodada. Ele **não** explica as rodadas que falham às dezenas
+ou centenas — e atribuí-las à tolerância do `slow` faz quem lê perseguir o
+problema errado.
+
+Essas rodadas têm outra causa, e ela aparece no log:
+
+```
+/bin/sh: line 1: 42719 Killed: 9  pnpm preview --port 4173
+```
+
+O `vite preview` é morto com SIGKILL no meio da suíte por pressão de memória da
+máquina (jetsam do macOS), e a partir daí todo teste falha com
+`net::ERR_CONNECTION_REFUSED`. Não é regressão e não é flake de teste: é o
+servidor morrendo.
+
+Provado por controle: a mesma `dev`, **sem nenhuma mudança nova**, colapsou de
+380/380 para 79 passed / 301 failed quando rodada com a máquina carregada, com a
+mesma linha `Killed: 9`. Toda spec que falha nessas rodadas passa em isolamento.
+
+Como evitar: `--workers=1` (o que o CI já faz), e nunca duas suítes ao mesmo
+tempo na mesma máquina.
+
+## Fase 9 — Tempo real com Socket.IO
+
+Decisões e limitações do §7 do desafio e do transporte do §6.
+
+23. **Transporte: `ws.link` do MSW + `@mswjs/socket.io-binding`, com um curinga
+    no path.** O `WebSocketHandler` do MSW **remove o prefixo `/socket.io/` do
+    path do cliente antes de casar** (acomodação interna para o protocolo), então
+    qualquer padrão que mencione `socket.io` — `'*/socket.io/'` incluído — nunca
+    casa: a conexão sai para a rede real e o handler não roda (na demo, um 200 do
+    servidor de arquivos, com reconexão infinita). O link é `ws.link('*')`; é o
+    único WebSocket do app, o curinga não gera ambiguidade.
+
+24. **`socket.io-client` é carregado por `import()` dinâmico, e isso é
+    obrigatório.** O `engine.io-client` captura o construtor de WebSocket uma
+    única vez, na avaliação do módulo (`const WebSocketCtor =
+    globalThis.WebSocket`). Importado estaticamente, ele é avaliado antes de
+    `worker.start()` trocar o global e guarda o WebSocket nativo — a conexão então
+    ignora o MSW por completo. Carregar depois dos mocks é o que faz o binding
+    interceptar. Efeito colateral bem-vindo: o cliente sai do chunk principal.
+
+25. **Contrato do evento.** `src/types/events.ts` (fase 1) já definia
+    `eventId`/`type`/`resource`/`version`/`emittedAt`/`data`. `eventId` é
+    `${resource.id}:v${version}` — identidade estável e derivável, não aleatória.
+
+26. **Ponto único de emissão: `bumpNftVersion` (`src/mocks/db.ts`).** Toda mutação
+    de edição já passava por ali (é o que recalcula `priceEth`/`available`), então
+    emitir `nft.updated` dali é o que garante o §6: REST e evento não podem
+    divergir, porque saem do mesmo lugar. Nenhum call site precisou mudar.
+
+27. **`order.updated` tem dois gatilhos, um só efeito.** `resolveOrderIfDue`
+    resolve o pagamento e emite; é chamado pelo `setTimeout` da criação (tempo
+    real, sem polling) e pelo `GET /orders/:id` (recuperação após refresh, quando
+    o timer morreu com a página). Quem chega segundo encontra `status !==
+    'pending'` e sai. Pedido confirmado ou recusado é terminal.
+
+28. **Duplicata e evento antigo são UMA guarda, não duas.** O cliente mantém um
+    `ledger` (recurso → maior `version` aplicada) e só aceita `version`
+    estritamente maior. Duplicata chega com versão igual, evento atrasado com
+    versão menor: nenhum dos dois passa, nenhum efeito é reaplicado.
+
+29. **O que o evento aplica direto e o que ele revalida.** O detalhe recebe patch
+    direto do payload (preço, disponibilidade, edições) — sem ida ao servidor.
+    Catálogo, destaque e carrinho são **invalidados**, não recalculados: menor
+    preço entre edições, soma de disponíveis e subtotal são regra de negócio do
+    mock, e reimplementá-las no cliente as duplicaria.
+
+30. **Reconciliação pós-reconexão.** No evento `connect` que não é o primeiro
+    daquele socket, `invalidateQueries({ refetchType: 'active' })` — literalmente
+    "reconcilie os recursos ativos com o REST". O teste prova que funciona
+    mudando o preço **enquanto o cliente está fora** (o evento sai para zero
+    conexões) e exigindo que a tela chegue ao valor novo mesmo assim.
+
+31. **Isolamento entre usuários: filtro no servidor + socket por escopo.** A
+    conexão declara seu dono no handshake (`query.userId`, o mesmo `scope` das
+    query keys) e o mock só entrega `order.updated` a conexões daquele dono;
+    `nft.updated` é público. O efeito depende de `scope`, então login, logout e
+    troca de usuário fecham o socket anterior (`removeAllListeners()` +
+    `disconnect()`) e abrem outro — um evento de sessão anterior não tem para
+    onde ir. Como o binding não tem rooms nem namespaces, o fan-out é um `Set` de
+    conexões com esse filtro.
+
+32. **Cenário obrigatório do §7, e o que ficou para a fase 7.** Passos 1–3 estão
+    completos: NFT no carrinho, mudança de preço durante a navegação, aviso na
+    interface (toast com o preço novo) e resumo atualizado (a query do carrinho é
+    invalidada; o badge do header passou a ter contagem real). O passo 4 — o
+    checkout impedir a confirmação — tem as duas metades prontas: o servidor já
+    devolve 409 `quote_outdated`, e `src/features/checkout/quote-freshness.ts`
+    expõe a mesma decisão como função pura (`isQuoteStale`, comparando o
+    `nftVersion` da cotação com o do carrinho relido). **A tela que consome isso é
+    a fase 7**; aqui ficam a regra e a chave de cache (`orderKey`, `cartKey`).
+
+33. **Keepalive manual.** O binding sintetiza um handshake anunciando
+    `pingInterval: 25000` e ninguém manda ping; sem isso o `engine.io-client`
+    derrubaria a conexão por "ping timeout" em 30s e ficaria reconectando. O mock
+    envia `'2'` (PING do engine.io) a cada 20s.
+
+34. **`window.__realtime` é instrumento, não caminho de simulação.** Contadores
+    (recebidos, aplicados, descartados, reconexões, reconciliações) para o
+    Playwright poder assertar que a guarda de versão **descartou** — algo que não
+    tem efeito visível na tela, por definição. Os eventos continuam chegando só
+    pelo `socket.io-client`; `window.__mocks.realtime.*` mexe no db simulado, e é
+    o db que emite.
+
+35. **Os gates novos foram forçados a falhar.** Quatro mutações (guarda de versão,
+    filtro por dono, reconciliação no `connect`, aviso no carrinho) foram aplicadas
+    de uma vez: falharam exatamente os quatro testes correspondentes e os outros
+    quatro continuaram verdes — os gates acusam e são específicos.
+
+36. **Asserção de preço renderizado só no desktop.** Três testes ficaram em
+    `test.describe('tempo real na interface (desktop)')`: no mobile o Buy Bar
+    mostra preço × quantidade (formatado por `roundEth`, que corta zero à direita)
+    e o carrossel de relacionados reusa o card de desktop — fixar texto de preço
+    nas duas viewports testaria a formatação das fases 3/4, não o evento. Os cinco
+    testes que cobrem os requisitos do §7 rodam nos dois projetos.
+
+### Limitações do transporte no ambiente de mocks (exigência do §6)
+
+- Sem namespaces, rooms ou broadcast do Socket.IO: o binding não os implementa.
+- Só o transporte `websocket` é interceptado — o cliente força
+  `transports: ['websocket']`; o long-polling default cairia em HTTP sem handler.
+- Handshake e ping são sintetizados: não há servidor real, logo nem ACK de evento
+  (`socket.emit` com callback) nem `volatile`/`binary` foram exercitados.
+- "Servidor" e "cliente" compartilham o contexto da página: uma aba nunca vê
+  evento de outra, e o isolamento entre usuários é por conexão, não por processo.
+- O timer que resolve o pedido morre com a página. É *desejável* — é o cenário de
+  "interrupção enquanto o pedido está pendente" do §7 — e a recuperação é o
+  `GET /orders/:id`, que resolve na leitura sem criar outra compra.

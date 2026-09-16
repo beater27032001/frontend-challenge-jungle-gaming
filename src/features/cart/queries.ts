@@ -24,9 +24,15 @@ export function useCartScope(): { scope: string; ready: boolean } {
   return { scope: session.data?.user.id ?? 'guest', ready: !session.isPending }
 }
 
+/** Chave canônica do carrinho. Existe separada porque a fase 9 invalida o
+ * resumo a partir de `nft.updated` (§7, passo 3) sem montar a query. */
+export function cartKey(scope: string) {
+  return ['cart', scope] as const
+}
+
 export function cartOptions(scope: string) {
   return queryOptions({
-    queryKey: ['cart', scope] as const,
+    queryKey: cartKey(scope),
     queryFn: async ({ signal }) => (await api.get<Cart>('/cart', { signal })).data,
   })
 }
