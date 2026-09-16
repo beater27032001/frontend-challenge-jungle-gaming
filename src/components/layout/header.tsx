@@ -2,6 +2,7 @@ import { LogIn, Search, ShoppingCart } from 'lucide-react'
 import { Link, useLocation, useNavigate, useSearch } from '@tanstack/react-router'
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { useCartCount } from '@/features/cart/queries'
 import type { CatalogSearch } from '@/features/nft/search-params'
 import { cn, linkFocusRing } from '@/lib/utils'
 
@@ -23,6 +24,7 @@ function activeNavLabel(pathname: string): 'Início' | 'Mercado' | null {
 export function Header({ withDivider = true }: { withDivider?: boolean }) {
   const pathname = useLocation({ select: (l) => l.pathname })
   const active = activeNavLabel(pathname)
+  const cartCount = useCartCount()
 
   // Busca inline (resolução OQ1, specs/03-catalogo.md): o Figma só desenha o
   // ícone de 20x20, sem estado expandido — desvio consciente registrado em
@@ -135,12 +137,22 @@ export function Header({ withDivider = true }: { withDivider?: boolean }) {
             >
               <Search className="size-5" />
             </button>
-            <button type="button" disabled aria-label="Carrinho" className="relative disabled:opacity-50">
-              {/* fase 6 liga isto — contagem não é buscada nesta fase (sem
-                  query), então o badge (16x16, só com contagem > 0) nunca
-                  aparece aqui. */}
+            <Link
+              to="/carrinho"
+              aria-label={cartCount > 0 ? `Carrinho (${cartCount} ${cartCount === 1 ? 'item' : 'itens'})` : 'Carrinho'}
+              className={cn(linkFocusRing, 'relative')}
+            >
               <ShoppingCart className="size-6" />
-            </button>
+              {/* Badge 16x16, só com contagem > 0 (fase 6). */}
+              {cartCount > 0 && (
+                <span
+                  aria-hidden
+                  className="absolute -right-2 -top-2 flex size-4 items-center justify-center rounded-full bg-primary text-tiny-10 font-bold text-primary-foreground"
+                >
+                  {cartCount}
+                </span>
+              )}
+            </Link>
             <Button disabled className="h-[35px] w-[100px] gap-1 text-body-16 text-primary-foreground">
               {/* fase 5 liga isto */}
               <LogIn className="size-5" />

@@ -29,6 +29,11 @@ function RootLayout() {
   // componente).
   const pathname = useLocation({ select: (l) => l.pathname })
   const isNftDetail = pathname.startsWith('/nft/')
+  // Fase 6: o carrinho mobile (`16:360`) segue o mesmo padrão — a folha
+  // Payment Summary (342px) ocupa o fundo, no lugar da TabBar e sem
+  // MobileSearchBar (o frame tem Screen Header próprio).
+  const isCart = pathname === '/carrinho'
+  const hasBottomSheet = isNftDetail || isCart
 
   return (
     <div className="min-h-dvh bg-background text-foreground">
@@ -39,15 +44,18 @@ function RootLayout() {
         Pular para o conteúdo
       </a>
       <Header withDivider={!isNftDetail} />
-      {!isNftDetail && <MobileSearchBar />}
+      {!hasBottomSheet && <MobileSearchBar />}
       {/* pb-[126px] evita que a TabBar fixa encubra o fim do conteúdo em
           telas < lg (critério 18); some em lg, onde não há TabBar. Em
           /nft/* a Buy Bar (164px) ocupa esse lugar em vez da TabBar. */}
-      <main id="main" className={cn(isNftDetail ? 'pb-[164px]' : 'pb-[126px]', 'lg:pb-0')}>
+      <main
+        id="main"
+        className={cn(isCart ? 'pb-[358px]' : isNftDetail ? 'pb-[164px]' : 'pb-[126px]', 'lg:pb-0')}
+      >
         <Outlet />
       </main>
       <Footer />
-      {!isNftDetail && <TabBar />}
+      {!hasBottomSheet && <TabBar />}
       <Toaster theme="dark" />
     </div>
   )
