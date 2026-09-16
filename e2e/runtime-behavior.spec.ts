@@ -827,6 +827,44 @@ test.describe('Accessibility — keyboard navigation and focus (criterion 24)', 
   })
 })
 
+test.describe('Contraste dos botões primários (WCAG AA, 4.5:1)', () => {
+  test('todo botão com fundo primary tem texto em ink, não no foreground herdado', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await boot(page)
+
+    // O Lighthouse pegou o que a suíte não pegava: o "Aplicar" do filtro de
+    // preço saía com #f5f1eb sobre #d28a4c — 2.50:1, contra o mínimo de 4.5:1.
+    // A causa é sutil: o tailwind-merge classifica `text-body-16` como classe
+    // de COR e remove `text-primary-foreground` da variante do Button. Some a
+    // cor sem ninguém notar, porque a classe some no merge, não no código.
+    //
+    // Este teste varre TODOS os botões com fundo primary em vez de olhar só o
+    // que quebrou: um teste do "Aplicar" deixaria o próximo passar.
+    const offenders = await page.evaluate(() => {
+      const lum = (rgb: string) => {
+        const [r, g, b] = rgb.match(/\d+/g)!.map((n) => {
+          const c = Number(n) / 255
+          return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4
+        })
+        return 0.2126 * r + 0.7152 * g + 0.0722 * b
+      }
+      const out: { text: string; ratio: number }[] = []
+      for (const el of document.querySelectorAll('button, a')) {
+        const st = getComputedStyle(el)
+        if (st.backgroundColor !== 'rgb(210, 138, 76)') continue
+        const hi = Math.max(lum(st.color), lum(st.backgroundColor))
+        const lo = Math.min(lum(st.color), lum(st.backgroundColor))
+        const ratio = (hi + 0.05) / (lo + 0.05)
+        if (ratio < 4.5) out.push({ text: (el.textContent || '').trim().slice(0, 24), ratio })
+      }
+      return out
+    })
+    expect(offenders).toEqual([])
+  })
+})
+
 test.describe('Accessibility — no horizontal overflow (criterion 23) and 200% zoom reflow (edge case)', () => {
   for (const width of [390, 768, 1440]) {
     test(`no horizontal overflow at ${width}px on /`, async ({ page }) => {
