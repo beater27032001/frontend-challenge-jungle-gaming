@@ -393,7 +393,28 @@ test.describe('Shell — desktop composition (>=1024, spec §2/§9)', () => {
 
     const inicio = header.getByRole('link', { name: 'Início' })
     await expect(inicio).toHaveClass(/text-text-accent/)
-    await expect(inicio).toHaveClass(/underline/)
+    // O item ativo é uma BARRA separada abaixo do item, não `text-decoration:
+    // underline` (que cola um risco na baseline). Medido, não só classe: 2px de
+    // altura, largura do item, em `primary`, abaixo da caixa do texto — e
+    // `text-decoration` tem de estar de volta em `none`.
+    await expect(inicio).toHaveCSS('text-decoration-line', 'none')
+    const bar = await inicio.evaluate((el) => {
+      const span = el.querySelector('span[aria-hidden]')
+      if (!span) return null
+      const b = span.getBoundingClientRect()
+      const a = el.getBoundingClientRect()
+      return {
+        height: b.height,
+        widthDelta: Math.round(b.width - a.width),
+        gapBelowText: Math.round(b.top - a.bottom),
+        bg: getComputedStyle(span).backgroundColor,
+      }
+    })
+    expect(bar).not.toBeNull()
+    expect(bar!.height).toBe(2)
+    expect(bar!.widthDelta).toBe(0)
+    expect(bar!.gapBelowText).toBe(7)
+    expect(bar!.bg).toBe('rgb(210, 138, 76)') // --color-primary #d28a4c
     for (const label of ['Mercado', 'Criadores', 'Aprenda']) {
       await expect(header.getByText(label, { exact: true })).toBeVisible()
     }
