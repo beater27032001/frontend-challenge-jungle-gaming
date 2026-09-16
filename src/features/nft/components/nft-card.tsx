@@ -14,7 +14,11 @@ export function NftCard({ nft }: { nft: NftSummary }) {
     <Link
       to="/nft/$nftId"
       params={{ nftId: nft.id }}
-      aria-label={nft.title}
+      // SEM `aria-label`: o nome acessível vem do conteúdo — título e preço,
+      // que é o que o usuário lê. Um aria-label só com o título reprovava em
+      // `label-content-name-mismatch` (WCAG 2.5.3), porque o texto visível
+      // não cabia dentro do nome; um aria-label com os dois seria a mesma
+      // string duplicada em dois lugares, para divergir na primeira mudança.
       className={cn(linkFocusRing, 'flex w-full flex-col gap-3')}
     >
       <div className="relative h-[300px] w-full bg-card">

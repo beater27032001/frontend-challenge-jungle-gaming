@@ -163,7 +163,7 @@ export function CartMobile(props: CartViewProps) {
               className="w-[97px] shrink-0 rounded-[40px] text-body-15 font-bold text-foreground outline-none focus-visible:ring-[3px] focus-visible:ring-ring/75 disabled:opacity-50"
               style={{
                 background:
-                  'linear-gradient(96.02deg, rgba(210,138,76,0.54) 0.94%, #d28a4c 105%)',
+                  'linear-gradient(96.02deg, color-mix(in srgb, var(--color-primary) 54%, transparent) 0.94%, var(--color-primary) 105%)',
               }}
             >
               {appliedCoupon ? 'Remover' : 'Aplicar'}
@@ -223,7 +223,7 @@ export function CartMobile(props: CartViewProps) {
             items.length === 0 && 'pointer-events-none opacity-50',
           )}
           style={{
-            background: 'linear-gradient(108.86deg, #d28a4c 3.96%, rgba(210,138,76,0.8) 121.97%)',
+            background: 'linear-gradient(108.86deg, var(--color-primary) 3.96%, color-mix(in srgb, var(--color-primary) 80%, transparent) 121.97%)',
           }}
         >
           Conectar e finalizar

@@ -292,9 +292,16 @@ catálogo estiver aberto noutra aba, o estoque volta lá em tempo real, via `nft
 | `pnpm test:report` | Abre o relatório HTML da última rodada. |
 | `pnpm test:update-snapshots` | Regrava as baselines visuais. |
 | `pnpm routes` | Regera `src/routeTree.gen.ts`. |
+| `pnpm lighthouse` | Auditoria Lighthouse do **build de produção** (`pnpm build` + `pnpm preview` na 4173), em `/`, `/nft/nft-001`, `/carrinho` e `/perfil`, desktop e mobile. |
 
-Auditoria Lighthouse: **ainda sem comando próprio** — é a fase 11 (ver
-[Limitações](#limitações-conhecidas)).
+Os resultados do Lighthouse, com as limitações da medição, ficam em
+[`docs/lighthouse.md`](docs/lighthouse.md) — regerado por `pnpm lighthouse`. Os JSON
+crus vão para `lighthouse-reports/` (não versionado).
+
+As baselines de regressão visual ficam em `e2e/__screenshots__/` e são geradas por
+`e2e/visual.spec.ts` (7 telas × desktop 1440 e mobile 390). Regravar só com
+`pnpm test:update-snapshots` e **olhando o diff** — baseline atualizada sem revisão
+transforma regressão em novo normal.
 
 ## Estrutura
 
@@ -320,24 +327,44 @@ parâmetros da consulta. Nenhum dado fictício vive fora de `src/mocks/`.
 
 Registro honesto; o detalhamento de cada decisão está em `ARCHITECTURE.md`.
 
-- **Flake residual na suíte E2E.** `pnpm test` roda 380 testes (desktop + mobile) e passa em
-  cerca de **3 de cada 4 rodadas completas** sob paralelismo padrão. O que resta é
-  **infraestrutura de teste, não código de aplicação**: a fonte conhecida é uma tolerância de
-  tempo de parede em `e2e/runtime-behavior.spec.ts:118` (assere que o cenário `slow` demora
-  ~2500 ms com teto de 3500 ms), apertada quando a máquina está sob carga. Com
-  `pnpm test -- --workers=1` a suíte passa de forma consistente. Três famílias de flake
-  anteriores foram diagnosticadas e corrigidas na causa raiz (itens 20 a 22 do
-  `ARCHITECTURE.md`); esta não foi perseguida até 100% por decisão de prazo — o conserto é
-  asserir só o piso da latência.
-- **Regressão visual não feita.** Não há baselines versionadas de início, detalhe, carrinho e
-  pagamento (§9 do desafio). A infraestrutura está pronta (`snapshotPathTemplate`,
-  `maxDiffPixelRatio: 0.01`, `pnpm test:update-snapshots`), mas as capturas ficaram de fora
-  por decisão de prazo. É a fase 10.
-- **Auditoria Lighthouse não feita.** Sem medições, sem métricas reportadas e sem comando de
-  auditoria — decisão de prazo, fase 11.
+- **Rode a suíte com `--workers=1`.** São **564 testes** (desktop 1440 + mobile 390), e a
+  última rodada completa deu **556 passed · 8 skipped · 0 failed**. Os 8 pulados são
+  específicos de um breakpoint — geometria que só existe no frame mobile, por exemplo.
+
+  Com paralelismo alto em máquina carregada, o `vite preview` é morto por pressão de memória
+  (`Killed: 9`) e **todo** teste falha em seguida com `net::ERR_CONNECTION_REFUSED`. Isso não
+  é flake de teste nem regressão: é o servidor morrendo. Provado por controle — a mesma
+  revisão, sem alteração nenhuma, colapsou de 380/380 para 79/301 com a máquina sob carga.
+
+  O flake residual conhecido é **1 falha em 1112 execuções** (`runtime-behavior.spec.ts:539`,
+  só em desktop): `boot()` resolve quando o MSW responde, não quando o React montou o header.
+  Caracterizado, não perseguido. Detalhes em `ARCHITECTURE.md`, "Limitação conhecida".
+
+- **Regressão visual: 14 baselines, e dois pontos cegos conhecidos.** `e2e/visual.spec.ts`
+  cobre início, detalhe, login, carrinho, pagamento, perfil e carteiras em 1440 e 390. O gate
+  foi provado por mutação (trocar `--color-primary` de `#d28a4c` para `#4c8ad2`): **12 das 14
+  acusaram**. As duas que não acusaram — carrinho e pagamento no mobile — passam porque o CTA
+  dessas composições **fixa `#d28a4c` num gradiente inline** em vez de usar o token
+  (`cart-mobile.tsx`, `checkout-mobile.tsx`, `nft-detail-mobile.tsx`, `account/fields.tsx`).
+  A baseline está certa; é o token que está furado.
+- **Lighthouse mede o app com o MSW dentro.** Os números de `docs/lighthouse.md` são de um
+  bundle que carrega service worker, handlers e fixtures em produção, porque a demo não tem
+  backend. Mobile fica na casa dos **80** por causa disso; desktop, 95–99. O run de `/perfil`
+  usa perfil semeado + `--disable-storage-reset` (sessão exige cookie), o que também deixa o
+  cache quente: não é comparável com os outros.
+
 - **Antes de cada rodada de `pnpm test`, mate processos na porta 4173.** `vite preview`
   esquecido de rodadas anteriores contamina a medição: já produziu 25 falhas espúrias em
   arquivos não relacionados.
+- **As seções do fim da home foram medidas por captura, não extraídas.** Os cards
+  promocionais e o "Diário da Cunhagem" foram construídos a partir de captura de tela do
+  Figma, porque a cota do MCP de design estourou. Proporções e escala seguem a régua do
+  catálogo (gap 56, raio 14, arte quadrada). Nada ali finge navegar: "Explorar" leva ao
+  catálogo e "Ler mais" é texto inerte, não link.
+- **Cinco defeitos visuais da entrega vieram de lacunas na transcrição do Figma**, não de erro
+  de implementação — alinhamento, cor de texto e uma seção inteira que o spec mandava omitir.
+  O padrão e o que aprender com ele estão em `ARCHITECTURE.md`, "O que a transcrição do Figma
+  errou".
 - **Desvios do Figma e placeholders.** Vários itens de extração fina (offsets, um gradiente de
   hero aproximado em CSS, ícones de marca substituídos por glifos genéricos do lucide v1,
   e-mail/telefone do footer) estão listados um a um no `ARCHITECTURE.md`. O tema é
@@ -365,8 +392,8 @@ PR para `dev`. Histórico das entregas em `.pipeline/history/LOG.md`.
 | 7 | Checkout + confirmação | entregue |
 | 8 | Perfil + carteiras | entregue |
 | 9 | Tempo real (`nft.updated`, `order.updated`) | entregue |
-| 10 | Testes E2E completos | feita ao longo das fases |
-| 11 | Acessibilidade + Lighthouse | a11y contínua; Lighthouse não executado |
+| 10 | Testes E2E completos + regressão visual | entregue (14 baselines) |
+| 11 | Acessibilidade + Lighthouse | entregue (`docs/lighthouse.md`) |
 | 12 | Deploy + documentação | entregue (este README + Vercel) |
 
 O que já está de pé e pode ser avaliado hoje:

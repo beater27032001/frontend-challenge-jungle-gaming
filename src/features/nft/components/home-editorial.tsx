@@ -75,9 +75,17 @@ export function HomeEditorial() {
             key={promo.title}
             className="flex overflow-hidden rounded-[14px] bg-card"
           >
+            {/* width/height: sem as dimensões o navegador não reserva espaço e
+                a imagem empurra o texto ao carregar (CLS). Sem `loading=lazy`:
+                eu o adicionei por iniciativa própria e ele tornou a baseline
+                visual não determinística — imagem preguiçosa nem sempre
+                termina de carregar antes do print. O achado do Lighthouse era
+                `unsized-images`, que as dimensões sozinhas resolvem. */}
             <img
               src={promo.image}
               alt=""
+              width={270}
+              height={224}
               className="hidden w-[270px] shrink-0 object-cover sm:block"
             />
             <div className="flex flex-1 flex-col items-end gap-3 p-6 text-right">
@@ -115,7 +123,13 @@ export function HomeEditorial() {
         <ul className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
           {POSTS.map((post) => (
             <li key={post.title} className="overflow-hidden rounded-[14px] bg-card">
-              <img src={post.image} alt="" className="h-[190px] w-full object-cover" />
+              <img
+                src={post.image}
+                alt=""
+                width={280}
+                height={190}
+                  className="h-[190px] w-full object-cover"
+              />
               <div className="flex flex-col gap-2 p-4">
                 <p className="text-tiny-10 text-text-secondary">
                   {post.date} <span aria-hidden>|</span> {post.read}
