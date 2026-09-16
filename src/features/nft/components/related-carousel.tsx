@@ -57,7 +57,10 @@ export function RelatedCarousel({ nft }: { nft: NftDetail }) {
                 className="size-[212px] rounded-[13px] object-cover"
               />
             </div>
-            <p className="text-body-15 text-foreground">{item.title}</p>
+            {/* `text-secondary`, não `foreground`: o nome do card não é branco
+                no Figma. O spec §3 lista "arte, título e preço" sem dar a cor —
+                lacuna de transcrição, corrigida com o usuário olhando o arquivo. */}
+            <p className="text-body-15 text-text-secondary">{item.title}</p>
             <p className="text-body-16 font-bold leading-[16px] text-text-accent">{item.priceEth} ETH</p>
           </Link>
         ))}
