@@ -852,6 +852,61 @@ test.describe('Scenarios', () => {
     expect(resolved.body.txHash).toBeUndefined()
   })
 
+  test('payment-declined: o estorno devolve carrinho e estoque — §3 "preservar itens em falha"', async ({
+    page,
+  }) => {
+    await boot(page, '?mock-reset=1')
+    await login(page, ANA)
+    await clearCart(page)
+
+    const before = await apiFetch(page, '/api/nfts/nft-015')
+    const availableBefore = before.body.editions.find(
+      (e: { id: string }) => e.id === 'nft-015-e1',
+    ).available
+
+    await addToCart(page, 'nft-015', 'nft-015-e1', 2)
+    const quote = await apiFetch(page, '/api/quote', { method: 'POST', body: {} })
+    const wallets = await apiFetch(page, '/api/wallets')
+    await setScenario(page, 'payment-declined')
+    const created = await apiFetch(page, '/api/orders', {
+      method: 'POST',
+      headers: { 'Idempotency-Key': 'declined-restore-1' },
+      body: {
+        quoteId: quote.body.id,
+        walletId: wallets.body[0].id,
+        network: 'ethereum',
+        payer: { name: 'Ana Volt', email: ANA.email },
+      },
+    })
+    expect(created.body.status).toBe('pending')
+
+    // A criação debita de imediato (reserva otimista): esta asserção é o que
+    // prova que o estorno abaixo mede uma devolução real, e não um débito que
+    // nunca aconteceu.
+    const during = await apiFetch(page, '/api/nfts/nft-015')
+    expect(
+      during.body.editions.find((e: { id: string }) => e.id === 'nft-015-e1').available,
+    ).toBe(availableBefore - 2)
+    const cartDuring = await apiFetch(page, '/api/cart')
+    expect(cartDuring.body.items).toHaveLength(0)
+
+    await page.waitForTimeout(1700)
+    const resolved = await apiFetch(page, `/api/orders/${created.body.id}`)
+    expect(resolved.body.status).toBe('declined')
+
+    // Recusado é terminal: o que foi reservado volta inteiro.
+    const after = await apiFetch(page, '/api/nfts/nft-015')
+    expect(
+      after.body.editions.find((e: { id: string }) => e.id === 'nft-015-e1').available,
+    ).toBe(availableBefore)
+
+    const cartAfter = await apiFetch(page, '/api/cart')
+    expect(cartAfter.body.items).toHaveLength(1)
+    expect(cartAfter.body.items[0].nftId).toBe('nft-015')
+    expect(cartAfter.body.items[0].editionId).toBe('nft-015-e1')
+    expect(cartAfter.body.items[0].quantity).toBe(2)
+  })
+
   test('boot query param ?mock-scenario=slow activates the scenario, visible via /api/health', async ({
     page,
   }) => {

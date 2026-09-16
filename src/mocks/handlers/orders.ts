@@ -17,6 +17,53 @@ function toResponse(order: (typeof db.orders)[number]): Order {
 }
 
 /**
+ * Estorno de pedido recusado. A criação debita estoque e carrinho de imediato
+ * (reserva otimista: é o que impede dois pedidos concorrentes de comprar a
+ * mesma edição), mas `declined` é terminal — sem devolver, o usuário perde o
+ * carrinho e o estoque some por uma compra que não aconteceu. O §3 exige
+ * preservar os itens em falha.
+ *
+ * Devolve exatamente o que foi debitado, item a item: `Order.items` é snapshot
+ * imutável da cotação, então as quantidades aqui são as mesmas que saíram.
+ * Linha que ainda existe no carrinho volta a somar; linha já removida é
+ * recriada.
+ *
+ * ponytail: sem teto em `available` — isto é reversão do próprio débito, não
+ * um ajuste de inventário. Se um dia houver outra origem de estoque, aí sim
+ * vale limitar por `totalSupply`.
+ */
+function restoreDeclined(order: (typeof db.orders)[number]): void {
+  const cart = db.carts[order.ownerId] ?? (db.carts[order.ownerId] = [])
+  const touchedNftIds = new Set<string>()
+
+  for (const item of order.items) {
+    const nft = db.nfts.find((n) => n.id === item.nftId)
+    const edition = nft?.editions.find((e) => e.id === item.editionId)
+    if (nft && edition) {
+      edition.available += item.quantity
+      touchedNftIds.add(nft.id)
+    }
+
+    const row = cart.find((r) => r.nftId === item.nftId && r.editionId === item.editionId)
+    if (row) {
+      row.quantity += item.quantity
+    } else {
+      db.counters.cartItem += 1
+      cart.push({
+        id: `ci_${db.counters.cartItem}`,
+        nftId: item.nftId,
+        editionId: item.editionId,
+        quantity: item.quantity,
+      })
+    }
+  }
+
+  // `bumpNftVersion` recalcula os derivados e emite `nft.updated`: quem estiver
+  // olhando o catálogo vê o estoque voltar sem precisar recarregar.
+  for (const nftId of touchedNftIds) bumpNftVersion(nftId)
+}
+
+/**
  * Resolve o pagamento quando o prazo venceu e emite `order.updated` uma única
  * vez (o segundo chamador encontra `status !== 'pending'` e sai). Dois
  * gatilhos: o `setTimeout` da criação (caminho de tempo real, sem polling) e o
@@ -34,6 +81,7 @@ async function resolveOrderIfDue(order: (typeof db.orders)[number]): Promise<voi
   if (activeScenario() === 'payment-declined') {
     order.status = 'declined'
     order.declineReason = 'Pagamento recusado pela operadora simulada.'
+    restoreDeclined(order)
   } else {
     order.status = 'confirmed'
     order.txHash = `0x${await sha256Hex(order.id)}`
