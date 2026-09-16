@@ -8,7 +8,13 @@ import type { Db } from './db'
  * tables and the loop index so two fresh builds are byte-identical.
  */
 
-export const SEED_VERSION = 5
+// 6 (fase 7): `imageUrl` no item da cotação, para o recibo não reler o catálogo.
+// 6 (fase 8): `username`/`ensName` no usuário e `type`/`referralCode` na carteira.
+// 7 (integração): as fases 7 e 8 subiram para 6 em paralelo, cada uma com um
+// conjunto diferente de campos. Um localStorage marcado como 6 pode ter vindo
+// de qualquer uma das duas e estar faltando metade — por isso 7, que é a
+// primeira versão que contém as duas mudanças.
+export const SEED_VERSION = 7
 
 // --- fixed tables -----------------------------------------------------
 
@@ -245,6 +251,8 @@ export function buildInitialDb(): Db {
       {
         id: 'u-ana',
         name: 'Ana Volt',
+        username: 'anavolt',
+        ensName: 'anavolt.eth',
         email: 'ana@greenmint.dev',
         avatarUrl: '/nft/ape-01.webp',
         bio: 'Colecionadora de arte generativa desde o primeiro bloco.',
@@ -255,6 +263,8 @@ export function buildInitialDb(): Db {
       {
         id: 'u-bruno',
         name: 'Bruno Chain',
+        username: 'brunochain',
+        ensName: '',
         email: 'bruno@greenmint.dev',
         avatarUrl: '/nft/ape-02.webp',
         bio: 'Explorando fotografia on-chain nos fins de semana.',
@@ -288,6 +298,7 @@ export function buildInitialDb(): Db {
             nftId: 'nft-002',
             editionId: 'nft-002-e1',
             title: nfts[1].title,
+            imageUrl: nfts[1].imageUrl,
             editionLabel: editionLabel(10), // nft-002-e1
             quantity: 1,
             unitPriceEth: ord1UnitPrice,
@@ -320,7 +331,9 @@ export function buildInitialDb(): Db {
           label: 'Carteira Principal',
           address: ANA_ETH_ADDRESS,
           network: 'ethereum',
+          type: 'metamask',
           role: 'primary',
+          referralCode: 'KURIO-ANA',
           createdAt: '2025-06-01T00:05:00.000Z',
         },
         {
@@ -328,6 +341,7 @@ export function buildInitialDb(): Db {
           label: 'Carteira Polygon',
           address: ANA_POLYGON_ADDRESS,
           network: 'polygon',
+          type: 'walletconnect',
           role: 'secondary',
           createdAt: '2025-06-02T00:00:00.000Z',
         },
@@ -338,6 +352,7 @@ export function buildInitialDb(): Db {
           label: 'Carteira Principal',
           address: BRUNO_ETH_ADDRESS,
           network: 'ethereum',
+          type: 'coinbase',
           role: 'primary',
           createdAt: '2025-07-10T00:05:00.000Z',
         },

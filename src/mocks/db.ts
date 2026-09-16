@@ -19,7 +19,18 @@ const STORAGE_KEY = 'greenmint:db:v1'
 
 export interface Db {
   seedVersion: number
-  users: Array<SessionUser & { passwordHash: string; salt: string; bio: string; createdAt: string }>
+  // `username`/`ensName` (fase 8, spec 08 §2.4) ficam no registro do usuário e
+  // não em `SessionUser`: são campos de perfil, e a sessão não precisa deles.
+  users: Array<
+    SessionUser & {
+      passwordHash: string
+      salt: string
+      username: string
+      ensName: string
+      bio: string
+      createdAt: string
+    }
+  >
   sessions: Record<string /* token */, { userId: string; expiresAt: string }>
   nfts: NftDetail[]
   favorites: Record<string /* userId */, string[]>

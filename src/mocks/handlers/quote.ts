@@ -37,6 +37,7 @@ export const quote = [
           nftId: row.nftId,
           editionId: row.editionId,
           title: nft.title,
+          imageUrl: nft.imageUrl,
           editionLabel: edition.label,
           quantity: row.quantity,
           unitPriceEth: edition.priceEth,

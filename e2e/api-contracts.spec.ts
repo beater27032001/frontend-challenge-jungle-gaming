@@ -461,6 +461,7 @@ test.describe('Quote', () => {
         label: 'Carteira Solana',
         address: '0x222222222222222222222222222222222222222b',
         network: 'solana',
+        type: 'metamask',
         role: 'secondary',
       },
     })
@@ -851,6 +852,61 @@ test.describe('Scenarios', () => {
     expect(resolved.body.txHash).toBeUndefined()
   })
 
+  test('payment-declined: o estorno devolve carrinho e estoque — §3 "preservar itens em falha"', async ({
+    page,
+  }) => {
+    await boot(page, '?mock-reset=1')
+    await login(page, ANA)
+    await clearCart(page)
+
+    const before = await apiFetch(page, '/api/nfts/nft-015')
+    const availableBefore = before.body.editions.find(
+      (e: { id: string }) => e.id === 'nft-015-e1',
+    ).available
+
+    await addToCart(page, 'nft-015', 'nft-015-e1', 2)
+    const quote = await apiFetch(page, '/api/quote', { method: 'POST', body: {} })
+    const wallets = await apiFetch(page, '/api/wallets')
+    await setScenario(page, 'payment-declined')
+    const created = await apiFetch(page, '/api/orders', {
+      method: 'POST',
+      headers: { 'Idempotency-Key': 'declined-restore-1' },
+      body: {
+        quoteId: quote.body.id,
+        walletId: wallets.body[0].id,
+        network: 'ethereum',
+        payer: { name: 'Ana Volt', email: ANA.email },
+      },
+    })
+    expect(created.body.status).toBe('pending')
+
+    // A criação debita de imediato (reserva otimista): esta asserção é o que
+    // prova que o estorno abaixo mede uma devolução real, e não um débito que
+    // nunca aconteceu.
+    const during = await apiFetch(page, '/api/nfts/nft-015')
+    expect(
+      during.body.editions.find((e: { id: string }) => e.id === 'nft-015-e1').available,
+    ).toBe(availableBefore - 2)
+    const cartDuring = await apiFetch(page, '/api/cart')
+    expect(cartDuring.body.items).toHaveLength(0)
+
+    await page.waitForTimeout(1700)
+    const resolved = await apiFetch(page, `/api/orders/${created.body.id}`)
+    expect(resolved.body.status).toBe('declined')
+
+    // Recusado é terminal: o que foi reservado volta inteiro.
+    const after = await apiFetch(page, '/api/nfts/nft-015')
+    expect(
+      after.body.editions.find((e: { id: string }) => e.id === 'nft-015-e1').available,
+    ).toBe(availableBefore)
+
+    const cartAfter = await apiFetch(page, '/api/cart')
+    expect(cartAfter.body.items).toHaveLength(1)
+    expect(cartAfter.body.items[0].nftId).toBe('nft-015')
+    expect(cartAfter.body.items[0].editionId).toBe('nft-015-e1')
+    expect(cartAfter.body.items[0].quantity).toBe(2)
+  })
+
   test('boot query param ?mock-scenario=slow activates the scenario, visible via /api/health', async ({
     page,
   }) => {
@@ -929,7 +985,7 @@ test.describe('Fix Plan (iteration 2): NftSummary derived fields stay coherent',
     return item
   }
 
-  test('seed remains unchanged: fresh reset top-level fields match the known fixture values, SEED_VERSION is 5', async ({
+  test('seed remains unchanged: fresh reset top-level fields match the known fixture values, SEED_VERSION is 6', async ({
     page,
   }) => {
     await bootReset(page)
@@ -952,7 +1008,20 @@ test.describe('Fix Plan (iteration 2): NftSummary derived fields stay coherent',
     // opção A): bumps once more to 5 — `editions[].label` passa a ser
     // gerado de `totalSupply` (`1/{totalSupply}`/`ABERTA`) em vez do nome
     // fantasia "Standard"/"Deluxe" (ARCHITECTURE.md fase 4 decisão 17).
-    expect(dbDump.seedVersion).toBe(5)
+    // Fase 7: `QuoteItem` — e portanto `Order.items`, o recibo — ganha
+    // `imageUrl`, para o snapshot do pedido carregar a arte em vez de a tela
+    // derivar a URL do catálogo (fase 7 decisão 46).
+    // Fase 8: `username`/`ensName` no usuário e `type`/`referralCode` na
+    // carteira (spec 08 §2.4 e §3.5).
+    // Integração: as duas fases subiram para 6 em paralelo, cada uma com um
+    // conjunto de campos. Um localStorage marcado como 6 pode ter vindo de
+    // qualquer uma e estar faltando metade, então a primeira versão que contém
+    // as duas mudanças é a 7. Atualizado, não deletado — mesmo precedente das
+    // fases 2, 3 e 4.
+    expect(dbDump.seedVersion).toBe(7)
+    // E o item do pedido semeado carrega a arte, provando que o snapshot é
+    // autossuficiente.
+    expect(dbDump.orders[0].items[0].imageUrl).toBeTruthy()
   })
 
   test('sold-out: top-level `available` (not just editions[0]) drops to 0 on both detail and list, and never contradicts editions', async ({
@@ -1454,6 +1523,7 @@ test.describe('Wallets', () => {
         label: 'Nova Principal',
         address: '0x111111111111111111111111111111111111111a',
         network: 'ethereum',
+        type: 'metamask',
         role: 'primary',
       },
     })
@@ -1475,11 +1545,253 @@ test.describe('Wallets', () => {
         label: 'Duplicada',
         address: wallets.body[0].address,
         network: 'ethereum',
+        type: 'metamask',
         role: 'secondary',
       },
     })
     expect(dup.status).toBe(409)
     expect(dup.body.error.code).toBe('conflict')
+  })
+})
+
+/**
+ * Fase 8 (specs/08-perfil-carteiras.md §2.4 e §3.5). O mock ganhou quatro
+ * campos e um verbo: `Profile.username`/`ensName`, `Wallet.type`/
+ * `referralCode` e `DELETE /api/wallets/:id`. Cada regra nova tem um gate
+ * aqui; os dois 409 (username duplicado e última primária) foram forçados a
+ * falhar antes de virarem verdes, pela regra do CLAUDE.md.
+ */
+test.describe('Profile (fase 8)', () => {
+  test('username and ensName round-trip through PATCH and GET', async ({ page }) => {
+    await bootReset(page)
+    await login(page, ANA)
+
+    const patched = await apiFetch(page, '/api/profile', {
+      method: 'PATCH',
+      body: { username: 'ana_volt_2', ensName: 'anavolt2.eth' },
+    })
+    expect(patched.status, JSON.stringify(patched.body)).toBe(200)
+    expect(patched.body).toMatchObject({ username: 'ana_volt_2', ensName: 'anavolt2.eth' })
+
+    const read = await apiFetch(page, '/api/profile')
+    expect(read.body).toMatchObject({ username: 'ana_volt_2', ensName: 'anavolt2.eth' })
+  })
+
+  test('a username already taken by another user is rejected with 409 and a field-level detail', async ({
+    page,
+  }) => {
+    await bootReset(page)
+    await login(page, BRUNO)
+    const conflict = await apiFetch(page, '/api/profile', {
+      method: 'PATCH',
+      body: { username: 'anavolt' }, // fixture da Ana
+    })
+    expect(conflict.status).toBe(409)
+    expect(conflict.body.error.code).toBe('conflict')
+    // Sem `details.username` a UI não tem como pendurar o erro NO campo, que é
+    // o requisito do §4 — o gate cobra o detalhe, não só o status.
+    expect(conflict.body.error.details?.username).toBeTruthy()
+
+    const read = await apiFetch(page, '/api/profile')
+    expect(read.body.username).toBe('brunochain')
+  })
+
+  test('keeping your own username is not a conflict', async ({ page }) => {
+    await bootReset(page)
+    await login(page, ANA)
+    const same = await apiFetch(page, '/api/profile', {
+      method: 'PATCH',
+      body: { username: 'anavolt', name: 'Ana V.' },
+    })
+    expect(same.status).toBe(200)
+    expect(same.body.name).toBe('Ana V.')
+  })
+
+  test('email is immutable: a PATCH carrying a new email leaves it untouched', async ({ page }) => {
+    await bootReset(page)
+    await login(page, ANA)
+    const patched = await apiFetch(page, '/api/profile', {
+      method: 'PATCH',
+      body: { email: 'outra@greenmint.dev', name: 'Ana Volt' },
+    })
+    expect(patched.status).toBe(200)
+    expect(patched.body.email).toBe(ANA.email)
+  })
+
+  test('wrong current password is a 400 with the error attached to currentPassword', async ({
+    page,
+  }) => {
+    await bootReset(page)
+    await login(page, ANA)
+    const wrong = await apiFetch(page, '/api/profile/password', {
+      method: 'POST',
+      body: { currentPassword: 'ErradaDeProposito#9', newPassword: 'NovaSenha#123' },
+    })
+    expect(wrong.status).toBe(400)
+    expect(wrong.body.error.details?.currentPassword).toBe('Senha atual incorreta.')
+
+    // Nada foi trocado: a senha antiga continua entrando.
+    await logout(page)
+    await login(page, ANA)
+  })
+
+  test('changing the password invalidates the old one and the new one logs in', async ({
+    page,
+  }) => {
+    await bootReset(page)
+    await login(page, ANA)
+    const changed = await apiFetch(page, '/api/profile/password', {
+      method: 'POST',
+      body: { currentPassword: ANA.password, newPassword: 'NovaSenha#123' },
+    })
+    expect(changed.status).toBe(204)
+    await logout(page)
+
+    const withOld = await apiFetch(page, '/api/auth/login', { method: 'POST', body: ANA })
+    expect(withOld.status).toBe(401)
+    const withNew = await apiFetch(page, '/api/auth/login', {
+      method: 'POST',
+      body: { email: ANA.email, password: 'NovaSenha#123' },
+    })
+    expect(withNew.status).toBe(200)
+  })
+})
+
+test.describe('Wallets: type, referralCode and DELETE (fase 8)', () => {
+  test('type is required and referralCode is optional on create', async ({ page }) => {
+    await bootReset(page)
+    await login(page, BRUNO)
+
+    const missingType = await apiFetch(page, '/api/wallets', {
+      method: 'POST',
+      body: {
+        label: 'Sem tipo',
+        address: '0x333333333333333333333333333333333333333c',
+        network: 'ethereum',
+        role: 'secondary',
+      },
+    })
+    expect(missingType.status).toBe(400)
+    expect(missingType.body.error.details?.type).toBeTruthy()
+
+    const created = await apiFetch(page, '/api/wallets', {
+      method: 'POST',
+      body: {
+        label: 'Sem indicação',
+        address: '0x333333333333333333333333333333333333333c',
+        network: 'ethereum',
+        type: 'walletconnect',
+        role: 'secondary',
+      },
+    })
+    expect(created.status, JSON.stringify(created.body)).toBe(201)
+    expect(created.body.type).toBe('walletconnect')
+    expect(created.body.referralCode).toBeUndefined()
+
+    const patched = await apiFetch(page, `/api/wallets/${created.body.id}`, {
+      method: 'PATCH',
+      body: { type: 'coinbase', referralCode: 'KURIO-BRU' },
+    })
+    expect(patched.status).toBe(200)
+    expect(patched.body).toMatchObject({ type: 'coinbase', referralCode: 'KURIO-BRU' })
+  })
+
+  test('an unknown wallet type is a validation error, not free text', async ({ page }) => {
+    await bootReset(page)
+    await login(page, BRUNO)
+    const bad = await apiFetch(page, '/api/wallets', {
+      method: 'POST',
+      body: {
+        label: 'Tipo inventado',
+        address: '0x444444444444444444444444444444444444444d',
+        network: 'ethereum',
+        type: 'ledger',
+        role: 'secondary',
+      },
+    })
+    expect(bad.status).toBe(400)
+  })
+
+  test('DELETE a secondary wallet: 204 and the list shrinks', async ({ page }) => {
+    await bootReset(page)
+    await login(page, ANA) // wallet_1 primary + wallet_2 secondary
+    const before = await apiFetch(page, '/api/wallets')
+    expect(before.body).toHaveLength(2)
+
+    const removed = await apiFetch(page, '/api/wallets/wallet_2', { method: 'DELETE' })
+    expect(removed.status).toBe(204)
+
+    const after = await apiFetch(page, '/api/wallets')
+    expect(after.body).toHaveLength(1)
+    expect(after.body[0].id).toBe('wallet_1')
+    expect(after.body[0].role).toBe('primary')
+  })
+
+  test('DELETE the only primary wallet: 409 and the list is untouched', async ({ page }) => {
+    await bootReset(page)
+    await login(page, BRUNO) // exatamente uma carteira, primária
+    const conflict = await apiFetch(page, '/api/wallets/wallet_3', { method: 'DELETE' })
+    expect(conflict.status).toBe(409)
+    expect(conflict.body.error.code).toBe('conflict')
+
+    const after = await apiFetch(page, '/api/wallets')
+    expect(after.body).toHaveLength(1)
+    expect(after.body[0].id).toBe('wallet_3')
+    expect(after.body[0].role).toBe('primary')
+  })
+
+  test('DELETE a primary wallet that has a secondary: 204 and the oldest secondary is promoted', async ({
+    page,
+  }) => {
+    await bootReset(page)
+    await login(page, ANA)
+    // Uma terceira carteira, mais nova que wallet_2, para provar que a
+    // promovida é a MAIS ANTIGA e não a última criada.
+    const newer = await apiFetch(page, '/api/wallets', {
+      method: 'POST',
+      body: {
+        label: 'Mais nova',
+        address: '0x555555555555555555555555555555555555555e',
+        network: 'ethereum',
+        type: 'metamask',
+        role: 'secondary',
+      },
+    })
+    expect(newer.status).toBe(201)
+
+    const removed = await apiFetch(page, '/api/wallets/wallet_1', { method: 'DELETE' })
+    expect(removed.status).toBe(204)
+
+    const after = await apiFetch(page, '/api/wallets')
+    const primaries = after.body.filter((w: { role: string }) => w.role === 'primary')
+    expect(primaries).toHaveLength(1)
+    expect(primaries[0].id).toBe('wallet_2') // a mais antiga das secundárias
+    expect(after.body.some((w: { id: string }) => w.id === 'wallet_1')).toBe(false)
+  })
+
+  test("DELETE another user's wallet: 404, and that wallet survives (isolation)", async ({
+    page,
+  }) => {
+    await bootReset(page)
+    await login(page, ANA)
+    const forbidden = await apiFetch(page, '/api/wallets/wallet_3', { method: 'DELETE' })
+    expect(forbidden.status).toBe(404)
+
+    await logout(page)
+    await login(page, BRUNO)
+    const brunoWallets = await apiFetch(page, '/api/wallets')
+    expect(brunoWallets.body.some((w: { id: string }) => w.id === 'wallet_3')).toBe(true)
+  })
+
+  test('a removed wallet stays removed after a reload (persist)', async ({ page }) => {
+    await bootReset(page)
+    await login(page, ANA)
+    expect((await apiFetch(page, '/api/wallets/wallet_2', { method: 'DELETE' })).status).toBe(204)
+
+    await page.reload()
+    await awaitMswReady(page)
+    const after = await apiFetch(page, '/api/wallets')
+    expect(after.body).toHaveLength(1)
   })
 })
 
