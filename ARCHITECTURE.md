@@ -609,7 +609,9 @@ fase e revisadas antes de entrar.
 Consolidado do que ficou aberto nas fases 5, 6 e 9. Quem pegar a fase 7 ou a 8
 deve ler esta lista antes de planejar.
 
-**Bloqueiam a fase 7 (checkout + confirmação)**
+**Bloqueiam a fase 7 (checkout + confirmação)** — **as cinco foram fechadas
+pela fase 7**; ver a seção "Fase 7" abaixo (decisões 43, 49 e 51, e o gate de
+mutação na 52). Mantidas aqui por rastreabilidade.
 
 1. **O CTA "Conectar e finalizar" do carrinho está `disabled`**, nas duas
    composições, com comentário apontando para cá. Não existia rota de destino.
@@ -811,3 +813,176 @@ Decisões e limitações do §7 do desafio e do transporte do §6.
 - O timer que resolve o pedido morre com a página. É *desejável* — é o cenário de
   "interrupção enquanto o pedido está pendente" do §7 — e a recuperação é o
   `GET /orders/:id`, que resolve na leitura sem criar outra compra.
+
+## Fase 7 — Pagamento e confirmação
+
+Decisões do §3 do desafio e do `specs/07-checkout.md`. As cinco dívidas listadas
+como "Bloqueiam a fase 7" foram fechadas; o que abriu de novo está no fim.
+
+37. **A confirmação é um diálogo, não uma rota** (`70376:239`, spec §1). Uma
+    composição só (`order-receipt.tsx`) com as duas aparências por breakpoint:
+    centralizada de 578 no desktop, folha inferior `rounded-t-[40px]` no mobile
+    (derivação do §6.8, que não tem frame — segue o padrão do Payment Summary do
+    carrinho mobile). Não são dois diálogos porque as duas composições do
+    checkout montam ao mesmo tempo e dois diálogos no DOM seriam dois diálogos
+    de verdade.
+
+38. **O modal mora na ROTA, não nas composições**, pelo mesmo motivo. E ele só é
+    renderizado na fase `confirmed`, que por construção de tipo só existe com um
+    `Order` da API — a regra eliminatória 3 é garantida pelo tipo, não pela
+    disciplina de quem escreve a tela.
+
+39. **`ConfirmPhase`: uma união discriminada em vez de cinco booleanos.**
+    `idle` · `submitting` · `timeout` · `revalidate` · `error` · `pending` ·
+    `confirmed` · `declined`, derivada por `confirmPhaseOf` (pura, em
+    `checkout-state.ts`). Booleanos separados permitiriam "confirmado e
+    aguardando" e obrigariam cada composição a decidir a precedência sozinha.
+    A precedência que importa: **o pedido ganha de tudo** (terminal é terminal) e
+    **erro de rede vem antes de cotação obsoleta** — no cenário `order-timeout` o
+    commit acontece ANTES do `HttpResponse.error()`, então a cotação fica
+    obsoleta *por consequência do envio*; tratar isso como "recotar" mandaria o
+    usuário criar um segundo pedido.
+
+40. **A chave de idempotência é derivada, não sorteada:**
+    `order:{quoteId}:{walletId}` (`checkout/mutations.ts`). Sem `useRef`, sem
+    `sessionStorage`, e por isso sobrevive a refresh: o reenvio depois de um
+    timeout recalcula a MESMA chave e recupera o pedido criado. `network` não
+    entra porque já está na cotação (a query key do `POST /quote` inclui a rede,
+    logo outra rede = outro `quoteId`); `payer` vem da sessão. A relação
+    chave↔corpo é 1:1, então o 409 `idempotency_conflict` do contrato não é
+    alcançável por navegação normal.
+
+41. **`refetchInterval` enquanto o pedido está `pending` — correção da decisão 27
+    da fase 9.** A fase 9 deixou `orderOptions` sem polling nenhum, com o
+    argumento de que o estado chega por `order.updated`. Isso vale para a página
+    que criou o pedido, mas **não** para a recuperação após refresh: o
+    `setTimeout` que resolve o pagamento morre com a página anterior, e quem
+    resolve na carga nova é o próprio `GET /orders/:id`. Sem uma segunda leitura,
+    um pedido recarregado antes dos 1500ms ficava `pending` para sempre —
+    exatamente o que o teste de refresh acusou. O intervalo é de 1s e **para
+    sozinho no estado terminal**. Não substitui o evento; é a rede de segurança
+    do caminho sem emissor vivo.
+
+42. **Os nove campos do formulário desktop não foram construídos** — decisão do
+    usuário já registrada no spec §3 e §6.7, aplicada aqui: o checkout coleta
+    **carteira e rede**, e `payer` vem da sessão. O tratamento visual dos campos
+    (40 de altura, `rounded-[3px]`, rótulo 15px com asterisco 22px em
+    `text-coral`) foi preservado nos dois blocos que sobraram, e nome/e-mail
+    aparecem como dado **exibido para revisão** (`<dl>`), não como input — é o
+    que o §3 pede ("permitir revisão antes do envio") sem coletar o que a API
+    ignora.
+
+43. **"Carteira e rede" são as três REDES, não as três marcas de carteira.**
+    O Figma rotula as três opções com `METAMASK`/`WALLETCONNECT`/`COINBASE`
+    (desktop §2) e com WalletConnect/MetaMask/Coinbase Wallet (mobile §6.4).
+    Provedor de carteira **não existe em contrato nenhum** — `Wallet.type` é a
+    dívida 6, da fase 8 — e um radiogroup que a API ignora é o campo decorativo
+    que o usuário proibiu. As três linhas passam a ser Ethereum/Polygon/Solana:
+    mesma geometria, mesmo número de opções, e efeito real (`POST /quote`
+    `{ network }` muda a taxa; o pedido grava a rede). Fecha a dívida 4.
+    **Quando a fase 8 acrescentar `Wallet.type`, esta decisão pode ser revisada**
+    — aí o provedor tem dono e caberia um segundo seletor.
+
+44. **Rádios nativos, não `role="radiogroup"` à mão.** `<fieldset>` +
+    `<input type="radio" class="peer sr-only">` com o círculo do Figma desenhado
+    ao lado: papel, agrupamento, `checked`, setas do teclado e roving tabindex
+    saem do navegador. O indicador **não é só cor** — o selecionado recebe um
+    ponto sólido de 8px, e não apenas uma borda `primary` (§6.3 avisa que a
+    sombra do Figma está no card ERRADO, então a elevação não pode ser o sinal).
+    Consequência para quem escreve teste: o input é 1×1 e o círculo visível fica
+    por cima, então `input.check()` do Playwright fica preso em "intercepts
+    pointer events" — clica-se o **rótulo**, que é o alvo do usuário real
+    (helper `chooseRadio` em `e2e/checkout.spec.ts`).
+
+45. **`?order=` na URL é o mecanismo de recuperação**, junto de `?coupon=` e
+    `?network=`. A carteira escolhida fica em `useState`: é seleção de
+    formulário, e o §3 quer que ela seja conectável/desconectável dentro da
+    sessão da tela. A barra "Carteira conectada" + "Trocar carteira" (§6.2) é a
+    simulação de conexão/desconexão que o §3 pede: **a seleção É a conexão**. Não
+    há endpoint de conectar carteira no contrato, e inventar um estado de conexão
+    paralelo ao `GET /wallets` seria caminho de negócio fora do mock (regra
+    eliminatória 1). A **recusa** da simulação é o cenário `payment-declined`.
+
+46. **`QuoteItem` ganhou `imageUrl`.** O recibo desenha a arte de cada item (§3)
+    e `Order.items` nunca pode reler o catálogo — sem o campo, a tela teria de
+    derivar a URL da imagem no cliente, duplicando a regra da fixture
+    (`/nft/ape-0{(i%4)+1}.webp`). É extensão de contrato de mock, o mesmo
+    precedente da dívida 6. `SEED_VERSION` sobe de 5 para 6.
+
+47. **`OrderSummary`: `Quote` e `Order` lidos pela mesma interface.** Antes de
+    enviar, a coluna "Seus NFTs" lê a cotação; depois, lê o pedido — que é o
+    snapshot imutável dela. Uma interface estrutural (`items`, `subtotalEth`,
+    `discountEth`, `networkFeeEth`, `totalEth`, `coupon`) em vez de duas
+    variantes na view.
+
+48. **O link "Ver no Etherscan" é simulado e diz que é.** `href` aponta para
+    `example.com` (domínio reservado pela IANA), a copy do Figma foi preservada e
+    uma legenda de 12px declara "Link de exploração simulado". A nota de rodapé
+    usa a rede DO pedido, não o "Ethereum" fixo do Figma — um recibo de Polygon
+    dizendo "confirmada na Ethereum" mentiria.
+
+49. **O CTA "Conectar e finalizar" virou `<Link>` para `/pagamento`** nas duas
+    composições do carrinho (fecha a dívida 1), levando o cupom na URL, e fica
+    `aria-disabled` + `pointer-events-none` com carrinho vazio. `/pagamento`
+    entra em `isBareMobile` no `__root` (Screen Header próprio) com `pb-0`: o
+    Confirm Button é o ÚLTIMO elemento da coluna, não barra fixa (§6, "107px de
+    folga") — diferente do carrinho, que paga 358px de folha. E "Mercado" passa a
+    ficar ativo no header em `/pagamento` (spec §2 desenha assim).
+
+50. **Guarda do fluxo privado por `<Navigate>`, não por `beforeLoad`.** A sessão
+    é uma query do TanStack Query (`useSession`); duplicá-la no `beforeLoad`
+    criaria uma segunda fonte de verdade de sessão. O redirecionamento usa
+    `?redirect=/pagamento`, o contrato que `/login` já lê desde a fase 5.
+
+51. **Os quatro cenários órfãos ganharam consumidor** (fecha a dívida 5), cada um
+    com teste em `e2e/checkout.spec.ts`: `price-changed` (409 barra e exige nova
+    confirmação), `sold-out` (conflito preserva o carrinho), `order-timeout`
+    (reenvio recupera o mesmo pedido — o gate assere que `ord_{n+1}` responde
+    **404**), `payment-declined` (terminal, e o recibo nunca abre). O passo 4 do
+    cenário obrigatório do §7 (dívida 2) tem teste próprio, disparado por
+    `editNftPrice` via socket, não por 409.
+
+52. **Os gates novos foram forçados a falhar.** Cinco mutações aplicadas de uma
+    vez — chave de idempotência aleatória, recibo aberto também para pedido
+    pendente, gate de cotação obsoleta desligado, `refetchInterval` removido,
+    `onCloseAutoFocus` removido — derrubaram exatamente seis testes, um por
+    requisito: "confirma só depois do mock", "recuperação após refresh",
+    "timeout: reenviar", "§7 passo 4", "price-changed" e o de foco no modal.
+    **O que NÃO caiu, e está registrado no próprio teste:** "clique repetido em
+    Confirmar" continuou verde com a chave aleatória, porque o navegador não
+    entrega `click` a um botão `disabled` — aquele teste prova a primeira
+    barreira (o handler não roda duas vezes), e a segunda (idempotência com dois
+    POSTs reais) é provada pelo teste de timeout e por `api-contracts.spec.ts`.
+
+### Divergências e pendências abertas pela fase 7
+
+- **O mock debita o carrinho e o estoque na CRIAÇÃO do pedido, não na
+  confirmação** (`handlers/orders.ts`, o bloco de commit antes do `push`). O §3
+  pede "após confirmação, remover do carrinho apenas os itens e quantidades
+  comprados". No caminho de sucesso o efeito é o mesmo; num pedido **recusado**
+  (`payment-declined`) o carrinho já foi esvaziado e o estoque já foi debitado, e
+  nada devolve. É comportamento de contrato da fase 1, com testes existentes, e
+  **não foi alterado nesta fase** — conserto correto: mover o débito para
+  `resolveOrderIfDue` (reservando no `pending`) e estornar no `declined`.
+- **Timeout + refresh sem `?order=` não é recuperável.** Quando o `POST` falha
+  como erro de rede o cliente nunca recebe o id, então não há o que colocar na
+  URL. Recarregando ali, o usuário vê um checkout limpo com o carrinho já
+  debitado e nenhum aviso do pedido pendente. Faltaria um `GET /orders` (lista do
+  usuário), que não existe no contrato — por isso o reenvio na mesma página é o
+  caminho coberto.
+- **A ilustração 80×80 do cabeçalho do recibo é placeholder** (glifo `Wallet` do
+  lucide, com `ponytail:` no código): a transcrição do spec não a nomeia. Mesmo
+  precedente dos ícones sociais do footer (fase 2).
+- **A rede não é derivada da carteira escolhida.** Selecionar a carteira Polygon
+  da Ana não muda `?network`. O contrato do pedido aceita os dois campos
+  independentemente e o mock não valida coerência; acoplá-los exigiria escrever na
+  URL durante o render. Decidido: ficam independentes.
+- **Medidas do modal que o spec §3 não dá** (espaçamento entre o bloco de totais
+  e a nota de rodapé, e o recorte mobile da folha) foram derivadas do padrão das
+  outras telas, não medidas. Calibrar com `get_design_context` quando o MCP
+  estiver disponível.
+- **Provedor de carteira (MetaMask/WalletConnect/Coinbase) não é coletado** — ver
+  decisão 43. Revisitar na fase 8, quando `Wallet.type` existir.
+- **`pnpm-lock.yaml` foi regenerado**: `@mswjs/socket.io-binding` estava em
+  `dependencies` no `package.json` e em `devDependencies` no lock (inconsistência
+  herdada da fase 9). Correção mecânica do `pnpm install`, nenhuma versão mudou.

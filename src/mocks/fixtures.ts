@@ -8,7 +8,7 @@ import type { Db } from './db'
  * tables and the loop index so two fresh builds are byte-identical.
  */
 
-export const SEED_VERSION = 5
+export const SEED_VERSION = 6
 
 // --- fixed tables -----------------------------------------------------
 
@@ -288,6 +288,7 @@ export function buildInitialDb(): Db {
             nftId: 'nft-002',
             editionId: 'nft-002-e1',
             title: nfts[1].title,
+            imageUrl: nfts[1].imageUrl,
             editionLabel: editionLabel(10), // nft-002-e1
             quantity: 1,
             unitPriceEth: ord1UnitPrice,
