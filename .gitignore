@@ -41,3 +41,6 @@ src/routeTree.gen.ts
 .env.*.local
 !.env.example
 .vercel
+
+# Worktrees de agentes (Claude Code)
+.claude/worktrees/
