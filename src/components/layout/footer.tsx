@@ -178,10 +178,17 @@ export function Footer() {
             </div>
           </div>
 
-          <p className="mt-8 text-center text-body-14 leading-[30px]">
-            © 2026 Kurio. Propriedade digital para todos.
-          </p>
         </div>
+      </div>
+
+      {/* Faixa 4: copyright. Fundo `ink` (#140d0a), o mesmo da página — é o
+          rodapé terminando e devolvendo o fundo do site, não mais uma seção.
+          Era um <p> dentro da faixa de links, herdando `bg-card`, o que fundia
+          as duas. Cor conferida no Figma (`70492:696`). */}
+      <div className="bg-ink">
+        <p className="mx-auto max-w-content px-6 py-4 text-center text-body-14 leading-[30px]">
+          © 2026 Kurio. Propriedade digital para todos.
+        </p>
       </div>
     </footer>
   )
