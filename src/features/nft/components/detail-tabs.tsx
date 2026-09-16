@@ -74,6 +74,10 @@ export function NftDetailTabs({ nft }: { nft: NftDetail }) {
           className="flex flex-col gap-3 pt-6 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/75"
         >
           <div
+            // `role="img"`: aria-label em <div> sem role e ignorado por
+            // leitor de tela e reprovado como aria-prohibited-attr. A fileira
+            // de estrelas E uma imagem de texto — role img e o papel correto.
+            role="img"
             aria-label={`Avaliação média: ${nft.ratingAvg} de 5, ${nft.ratingCount} avaliações`}
             className="flex items-center gap-2"
           >

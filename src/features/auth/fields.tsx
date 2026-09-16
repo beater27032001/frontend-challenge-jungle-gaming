@@ -46,7 +46,10 @@ export function PasswordField<TFieldValues extends FieldValues>({
               type="button"
               onClick={() => setVisible((v) => !v)}
               aria-label={visible ? 'Ocultar senha' : 'Mostrar senha'}
-              className="absolute right-4 top-1/2 flex h-5 w-[18px] -translate-y-1/2 items-center justify-center text-text-secondary"
+              // Alvo de toque de 24px (WCAG 2.5.8): a caixa clicável cresce,
+              // o ícone de 18px continua igual. `-m-` compensa o tamanho novo
+              // para o botão não deslocar o campo.
+              className="absolute right-4 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center text-text-secondary"
             >
               {visible ? <EyeOff aria-hidden className="size-[18px]" /> : <Eye aria-hidden className="size-[18px]" />}
             </button>
