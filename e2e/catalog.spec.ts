@@ -20,6 +20,14 @@ import {
  * ARCHITECTURE.md "Dívidas para a fase 3" item 6), and navigation/shell.
  */
 
+/** O nome acessível do card é "Título 1.23 ETH" — o preço entra porque o
+ * card deixou de ter `aria-label` e passou a ser nomeado pelo próprio
+ * conteúdo (WCAG 2.5.3). Casar por prefixo ancorado mantém a asserção
+ * específica sem depender do preço, que muda com as fixtures. */
+function escapeRe(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
 test.describe('URL is the source of truth for search/filter/sort/page', () => {
   test('deep link with a filter combo renders matching state, survives reload, and degrades invalid params', async ({
     page,
@@ -32,18 +40,18 @@ test.describe('URL is the source of truth for search/filter/sort/page', () => {
     await expect(page.getByRole('button', { name: 'Solana' })).toHaveAttribute('aria-pressed', 'true')
     const sortTrigger = page.getByRole('combobox', { name: 'Ordenar por' })
     await expect(sortTrigger).toContainText('Menor preço')
-    await expect(page.getByRole('link', { name: '2' })).toHaveAttribute('aria-current', 'page')
+    await expect(page.getByRole('link', { name: '2', exact: true })).toHaveAttribute('aria-current', 'page')
 
     const expected = await apiFetch(page, '/api/nfts?network=solana&sort=price-asc&page=2')
     expect(expected.body.items.length).toBeGreaterThan(0)
     for (const item of expected.body.items) {
-      await expect(page.getByRole('link', { name: item.title, exact: true })).toBeVisible()
+      await expect(page.getByRole('link', { name: new RegExp(`^${escapeRe(item.title)}\\b`) })).toBeVisible()
     }
 
     // Reload preserves the same controls/results (criterion 2).
     await page.reload()
     await expect(page.getByRole('button', { name: 'Solana' })).toHaveAttribute('aria-pressed', 'true')
-    await expect(page.getByRole('link', { name: '2' })).toHaveAttribute('aria-current', 'page')
+    await expect(page.getByRole('link', { name: '2', exact: true })).toHaveAttribute('aria-current', 'page')
 
     // Invalid params degrade to the default catalogue, no crash (criterion 5).
     await page.goto('/?category=invalida&network=bitcoin&page=abc')
@@ -66,7 +74,7 @@ test.describe('URL is the source of truth for search/filter/sort/page', () => {
     await expect(page.getByRole('button', { name: 'Arte digital' })).toHaveAttribute('aria-pressed', 'true')
     await expect(page.getByRole('button', { name: 'Polygon' })).toHaveAttribute('aria-pressed', 'true')
     for (const item of expected.body.items) {
-      await expect(page.getByRole('link', { name: item.title, exact: true })).toBeVisible()
+      await expect(page.getByRole('link', { name: new RegExp(`^${escapeRe(item.title)}\\b`) })).toBeVisible()
     }
   })
 
@@ -262,7 +270,7 @@ test.describe('Data states (skeleton/empty/error/background update)', () => {
     await expect(page.getByRole('button', { name: 'Arte digital' })).toHaveAttribute('aria-pressed', 'false')
     const expectedPhotography = await apiFetch(page, '/api/nfts?category=photography')
     for (const item of expectedPhotography.body.items.slice(0, 3)) {
-      await expect(page.getByRole('link', { name: item.title, exact: true })).toBeVisible()
+      await expect(page.getByRole('link', { name: new RegExp(`^${escapeRe(item.title)}\\b`) })).toBeVisible()
     }
   })
 
@@ -320,7 +328,9 @@ test.describe('Navigation and shell', () => {
     await bootReset(page)
 
     const card = page.getByRole('link').filter({ hasText: /ETH/ }).first()
-    const title = await card.getAttribute('aria-label')
+    // O título vem do <p> do card, não mais de um aria-label: o card deixou
+    // de ter rótulo próprio para que o nome acessível saia do conteúdo.
+    const title = await card.locator('p').first().innerText()
     await card.click()
     await expect(page).toHaveURL(/\/nft\/nft-\d+/)
     // Fase 4 substitui o stub ("Detalhes do NFT") pela tela real — o <h1>
@@ -719,12 +729,12 @@ test.describe('out-of-order — stronger assertion than a pressed-state check', 
     await page.getByRole('button', { name: 'Fotografia' }).click() // request 2: 100ms
 
     // Give request 2 time to land and paint photography's page 1.
-    await expect(page.getByRole('link', { name: 'Neon Drift', exact: true })).toBeVisible()
+    await expect(page.getByRole('link', { name: /^Neon Drift\b/ })).toBeVisible()
 
     // Now let the stale 1500ms response for "art" arrive. It must not
     // clobber the grid back to art's page-1 content.
     await page.waitForTimeout(1700)
-    await expect(page.getByRole('link', { name: 'Solar Drift', exact: true })).toHaveCount(0)
+    await expect(page.getByRole('link', { name: /^Solar Drift\b/ })).toHaveCount(0)
     await expect(page.getByRole('button', { name: 'Fotografia' })).toHaveAttribute('aria-pressed', 'true')
     await expect(page.getByRole('button', { name: 'Arte digital' })).toHaveAttribute('aria-pressed', 'false')
   })
@@ -786,7 +796,7 @@ test.describe('edge cases from the spec not exercised elsewhere', () => {
     // handling is fase 4's job; this fase must not hide it, disable its
     // link, or otherwise imply a state the catalogue doesn't actually track.
     await page.goto('/?category=art-3d')
-    const card = page.getByRole('link', { name: 'Astral Bloom', exact: true })
+    const card = page.getByRole('link', { name: /^Astral Bloom\b/ })
     await expect(card).toBeVisible()
     await expect(card).toBeEnabled()
     await expect(card).toHaveAttribute('href', '/nft/nft-013')
@@ -1104,15 +1114,15 @@ test.describe('out-of-order in the running system: a cross-control race, not sam
     await page.locator('header').getByLabel('Explorar coleções').fill(target.title)
     await page.locator('header').getByLabel('Explorar coleções').press('Enter')
 
-    await expect(page.getByRole('link', { name: target.title, exact: true })).toBeVisible()
-    await expect(page.getByRole('link', { name: other.title, exact: true })).toHaveCount(0)
+    await expect(page.getByRole('link', { name: new RegExp(`^${escapeRe(target.title)}\\b`) })).toBeVisible()
+    await expect(page.getByRole('link', { name: new RegExp(`^${escapeRe(other.title)}\\b`) })).toHaveCount(0)
     await expect(page.getByRole('status')).toHaveText('1 NFTs encontrados')
 
     // Let the stale 1500ms "network=solana" (no q) response land — it must
     // not clobber the grid back to the unfiltered 16-item network result.
     await page.waitForTimeout(1700)
-    await expect(page.getByRole('link', { name: target.title, exact: true })).toBeVisible()
-    await expect(page.getByRole('link', { name: other.title, exact: true })).toHaveCount(0)
+    await expect(page.getByRole('link', { name: new RegExp(`^${escapeRe(target.title)}\\b`) })).toBeVisible()
+    await expect(page.getByRole('link', { name: new RegExp(`^${escapeRe(other.title)}\\b`) })).toHaveCount(0)
     await expect(page.getByRole('status')).toHaveText('1 NFTs encontrados')
     const params = await page.evaluate(() => Object.fromEntries(new URLSearchParams(location.search)))
     expect(params).toEqual({ network: 'solana', q: target.title })
