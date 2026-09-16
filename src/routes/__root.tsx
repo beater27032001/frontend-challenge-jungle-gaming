@@ -88,7 +88,13 @@ function RootLayout() {
         id="main"
         className={cn(
           'flex-1',
-          isCart ? 'pb-[358px]' : isNftDetail ? 'pb-[164px]' : isAuthRoute || isCheckout ? 'pb-0' : 'pb-[126px]',
+          isCart
+            ? 'pb-[358px]'
+            : isNftDetail
+              ? 'pb-[166px]' // Buy Bar mede 166, não 164 — medido no DOM
+              : isAuthRoute || isCheckout
+                ? 'pb-0'
+                : 'pb-[159px]', // TabBar 126 + o overhang de 33 do botão flutuante
           'lg:pb-0',
           !(isNftDetail || isCart || isCheckout) && 'lg:pt-8',
         )}
