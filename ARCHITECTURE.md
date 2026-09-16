@@ -88,8 +88,9 @@ da fase 4 abaixo, com a numeração de lá.
    (filtrar por categoria) tem equivalente completo na composição mobile — o
    `Sheet` de filtros aberto pela `MobileSearchBar`, que já existia como
    primitivo desde a fase 2 sem consumidor. A decisão 2 continua válida com o
-   gatilho quitado, coberta em `e2e/runtime-behavior.spec.ts` (620px) e em
-   `e2e/catalog.spec.ts` (equivalência funcional do filtro).
+   gatilho quitado, coberta em `e2e/runtime-behavior.spec.ts` (viewport-proxy
+   de 720px para o zoom 200% de um baseline 1440) e em `e2e/catalog.spec.ts`
+   (equivalência funcional do filtro, viewport 640×800).
 2. **`network` entra no modelo de NFT** (`NftSummary`/`NftDetail`/
    `NftListParams`, `src/types/nft.ts`). A seção "Rede" do painel de filtros
    (specs/02-design-system.md §3) não tinha dado para filtrar — renderizá-la
@@ -200,8 +201,10 @@ Achados `[minor]` da revisão da fase 3 mais o que sobrou da fase 2, num só lug
 1. `e2e/catalog.spec.ts:387-391` — flake de ~1 em 20 (mobile, "Buscar" não
    focado após 4 Tabs). Preâmbulo com contagem fixa de Tabs sem asserção
    intermediária, mesma classe do flake de slider. Asserir foco a cada Tab.
-2. `src/features/nft/components/catalog-toolbar.tsx:78` — prop `total`
-   recebida e nunca usada. API morta: remover ou consumir.
+2. ~~`src/features/nft/components/catalog-toolbar.tsx:78` — prop `total`
+   recebida e nunca usada. API morta: remover ou consumir.~~ **FECHADA.** A
+   prop foi removida; não há mais nenhuma ocorrência de `total` no arquivo
+   (auditoria de consistência, set/2026).
 3. `src/components/layout/footer.tsx:84` — o `<Link search={{ category }}>`
    literal ganha `aria-current` injetado pelo router por match parcial. O
    Reviewer julgou aceitável (nunca há dois, e "coleção corrente" é semântica
@@ -220,8 +223,12 @@ Achados `[minor]` da revisão da fase 3 mais o que sobrou da fase 2, num só lug
    prefixo `/nft` para "Mercado". Entrada obsoleta: montei esta lista a partir
    dos achados do Reviewer sem conferir se a fase 3 já os tinha resolvido. A
    fase 4 só cobre o comportamento com teste.
-7. `src/index.css` — sombreamento de `--color-foreground` sobre o alias
-   `--foreground`, mesma armadilha da colisão `--secondary` já corrigida.
+7. ~~`src/index.css` — sombreamento de `--color-foreground` sobre o alias
+   `--foreground`, mesma armadilha da colisão `--secondary` já corrigida.~~
+   **FECHADA como decisão registrada, não como bug** (`src/index.css:24-29`):
+   são dois tokens Figma distintos que só por coincidência de nome parecem
+   duplicados; mudar qualquer um dos valores seria churn de baseline sem ganho
+   visual. O comentário no CSS é o registro.
 8. `src/components/ui/card.tsx` — `rounded-xl` (10px) fora do raio de sistema.
 9. ~~`src/components/ui/slider.tsx` — thumb `bg-white`~~ **JÁ FECHADA na
    fase 3.** O thumb usa `primary` e o trilho inativo `border-soft`. Mesma
@@ -404,14 +411,16 @@ por ele mesmo
     `keyboard.press('Tab')` logo após `boot`/`bootReset`), não só no teste
     que o coordenador citou — mesma bug, mesmo commit.
 22. **Leitura única de `location.search` correndo contra um `.click()`
-    assíncrono.** `catalog.spec.ts:73` lia `location.search` uma vez,
+    assíncrono.** `catalog.spec.ts` (hoje linha 102, era 73) lia
+    `location.search` uma vez,
     imediatamente após `.click()` no filtro de rede — mas `.click()` resolve
     quando o evento é disparado, não quando o `navigate()` do router (que
     reage ao `onClick`) termina de escrever a URL. Sob contenção pesada essa
     janela é grande o bastante para a leitura pegar a URL velha. Trocado por
     `expect.poll(() => page.evaluate(() => location.search))` só nessa
-    asserção — não uma reescrita de todo o arquivo, que tem 47 leituras
-    síncronas de `location.search`; as outras seguem depois de
+    asserção — não uma reescrita de todo o arquivo, que tem dezenas de leituras
+    síncronas de `location.search` (49 na contagem de set/2026); as outras
+    seguem depois de
     `goBack()`/`goForward()` (mecânica nativa do browser, síncrona com a
     própria navegação, sem a mesma corrida).
 23. **Higiene de processo descoberta no meio da investigação**: rodadas
@@ -543,14 +552,25 @@ presunção original.
     limpar cookies manualmente ou voltar ao desktop — aceito, registrado
     como dívida (mesma decisão do plano, "Out of scope" do spec 05).
 
+    ✅ **QUITADA na fase 8.** O botão "Sair" mora na Account Sidebar
+    (`src/components/account-sidebar.tsx:148-153`), e a sidebar vira faixa de
+    navegação no topo abaixo de `md` (decisão 1 do desvio mobile da fase 8) —
+    logo `/perfil` e `/carteiras` dão entrada de logout em qualquer largura.
+
 14. **Guard de rota (`beforeLoad`) não nasce nesta fase.** Não existe rota
     privada ainda — checkout (7) e perfil/carteiras (8) não têm rota, e
     favoritos não têm página própria no Figma. O que a fase 5 protege,
     protege na interação (coração/Favoritar → navega para `/login`). O guard
     nasce com a primeira rota privada, ~5 linhas usando o mesmo `redirect`.
 
-15. **Logout faz `queryClient.clear()` + `window.location.reload()`, não só
-    `clear()`.** Investigação ao vivo (Playwright + `window.__debug*` ad-hoc)
+15. **Logout faz `queryClient.clear()` + navegação dura, não só `clear()`.**
+    (Nota da auditoria de set/2026: o texto original dizia
+    `window.location.reload()`. O código em `use-auth.ts` faz
+    `window.location.href = '/'` — a mudança veio depois, porque recarregar
+    *no lugar* a partir de uma rota privada caía em laço: a guarda mandava
+    para `/login?redirect=<rota privada>` e fechar o modal voltava para lá. O
+    mecanismo é o mesmo — reconstruir a árvore do zero —, o destino é que não
+    é a rota atual.) Investigação ao vivo (Playwright + `window.__debug*` ad-hoc)
     achou um caso real de vazamento pós-logout: o coração do card de
     catálogo (cada card com seu próprio `useSession()`) continuava mostrando
     o favorito de Ana depois de "Sair", enquanto o Header (também
@@ -579,6 +599,13 @@ presunção original.
     socket nascer, o `disconnect()` entra na mesma rotina de higiene
     (`onSuccess` de `useLogin`/`useRegister`/`useLogout`), não em um lugar
     novo.
+
+    ⚠️ **A previsão não se confirmou** (auditoria set/2026). A fase 9 pôs a
+    higiene do socket em outro lugar: o efeito de `use-realtime.ts` depende de
+    `scope`, então login, logout e troca de usuário derrubam a conexão pelo
+    cleanup do próprio `useEffect` (`removeAllListeners()` + `disconnect()`,
+    `use-realtime.ts:178-179`), não no `onSuccess` das mutations de auth. O
+    resultado exigido pelo §11 é o mesmo; o lugar não é. Ver fase 9, decisão 31.
 
 17. **Debounce do interceptor de `session_expired` é por tempo (300ms), não
     por promise.** Várias queries em voo resolvem em tasks separadas, não no
@@ -692,8 +719,12 @@ a seção "Fase 8" no fim deste arquivo.
 10. **O "modal sobre o catálogo" não mantém a página de fundo montada.** O TanStack
     Router não tem intercepting routes; o retorno ao fluxo é por `redirect`. Atende
     o §3 funcionalmente, não visualmente.
-11. **Não existe `specs/09-tempo-real.md`.** Todas as outras fases têm spec própria;
-    o conteúdo da 9 está só aqui.
+11. **Não existe `specs/09-tempo-real.md`.** O conteúdo da 9 está só aqui.
+    (Correção da auditoria set/2026: o texto original dizia "todas as outras
+    fases têm spec própria". `specs/` tem `00`, `02`–`08` — as fases 1, 9, 10,
+    11 e 12 também não têm arquivo. A 1 está documentada pelos contratos em
+    `src/types/` e por `e2e/api-contracts.spec.ts`; as 10–12, por este arquivo,
+    pelo `README.md` e por `docs/lighthouse.md`.)
 12. **A conexão declara o próprio dono** (`query: { userId: scope }` no handshake).
     Num mock rodando no contexto da página não há cookie por conexão, mas é o
     cliente afirmando identidade — aceitável aqui, jamais em produção.
@@ -712,6 +743,16 @@ transcrição**, não de erro de implementação.
 | §5 do catálogo omitia o alinhamento da paginação | alinhada à esquerda |
 | §3 do detalhe listava "arte, título e preço", sem cor | nome do card em branco |
 | decisão 13 omitia as seções editoriais | home terminando na paginação |
+
+**A coluna da direita é histórica: os cinco defeitos já foram corrigidos**
+(auditoria set/2026, cada um conferido no código). O copyright tem faixa própria
+com fundo `ink` (`footer.tsx`, "Faixa 4"); "Apelido da carteira" voltou para o
+formulário de perfil, com a §2.4 do spec 08 emendada por "⚠️ Correção do
+usuário"; a paginação é `justify-end` (`src/routes/index.tsx:113`); o nome do
+card do carrossel é `text-text-secondary` (commit `edfe2d8`); e as seções
+editoriais foram implementadas (commit `34067db`, ver a reversão registrada na
+decisão 13 da fase 3). A tabela fica porque o **padrão** que ela revela é o
+valor dela, não o estado do código.
 
 Três desses não são ausência de informação: são informação **errada ou
 contraditória**. A §2.4 do perfil contradizia a §2 do mesmo arquivo, que já
@@ -740,13 +781,16 @@ lado, teria pego todos — e é mais barato que uma rodada de correções.
 
 ## Limitação conhecida — flake residual na suíte E2E
 
-Para quem avalia: `pnpm test` roda 380 testes em desktop 1440 e mobile 390, e
-passa em cerca de 3 de cada 4 rodadas completas sob paralelismo padrão. Antes das
-correções da fase 4 falhava em torno de metade das rodadas.
+Para quem avalia: na época desta medição `pnpm test` rodava 380 testes em desktop
+1440 e mobile 390, e passava em cerca de 3 de cada 4 rodadas completas sob
+paralelismo padrão. Antes das correções da fase 4 falhava em torno de metade das
+rodadas. (A suíte hoje tem **566 testes** — `npx playwright test --list`, set/2026;
+os 380 são o número da fase 4, mantido porque é o denominador daquela medida.)
 
 O que resta é **infraestrutura de teste**, não código de aplicação. Três famílias
 foram diagnosticadas e corrigidas na causa (itens 20 a 22); a fonte residual é uma
-tolerância de tempo de parede em `e2e/runtime-behavior.spec.ts:118`, que assere que
+tolerância de tempo de parede em `e2e/runtime-behavior.spec.ts:142` (o teste
+começa na 130; a referência antiga a `:118` ficou para trás), que assere que
 o cenário `slow` demora ~2500ms com teto de 3500ms — apertado quando a máquina está
 sob carga. Rodar com `--workers=1` passa de forma consistente.
 
@@ -819,6 +863,14 @@ mesmo padrão de `pressFirstTab`: trocar a suposição por espera explícita
     num gradiente inline. Cinco pontos fazem isso: `cart-mobile.tsx` (×2),
     `checkout-mobile.tsx`, `nft-detail-mobile.tsx` e `account/fields.tsx`.
     Trocar por `var(--color-primary)` fecharia o ponto cego — dívida aberta.
+
+    ✅ **QUITADA** (commit `491c0fc`, `fix(tokens)`). Os gradientes passaram a
+    usar `var(--color-primary)` + `color-mix()`; a mutação agora é acusada por
+    **14 das 14** baselines. A lista de cinco pontos acima estava incompleta:
+    eram **seis**, em cinco arquivos — `featured-banner.tsx` também fixava a
+    cor. Hoje `grep -rn d28a4c src/` só encontra a definição do token em
+    `src/index.css:19` (e uma citação em comentário de contraste em
+    `filter-panel.tsx`).
 
 33. **Determinismo veio de esperar estado, nunca tempo.** `settle()` espera
     mocks → socket → zero `[data-slot="skeleton"]` → zero `[aria-busy="true"]` →
@@ -1039,6 +1091,13 @@ como "Bloqueiam a fase 7" foram fechadas; o que abriu de novo está no fim.
     (`/nft/ape-0{(i%4)+1}.webp`). É extensão de contrato de mock, o mesmo
     precedente da dívida 6. `SEED_VERSION` sobe de 5 para 6.
 
+    > **Nota da auditoria (set/2026).** As fases 7 e 8 correram em paralelo e
+    > **as duas** subiram `SEED_VERSION` de 5 para 6. O merge `b322478`
+    > resolveu o conflito somando os dois bumps: o valor em vigor em
+    > `src/mocks/fixtures.ts:17` é **7**, não 6. Esta decisão e a 39 da fase 8
+    > descrevem o bump da própria fase e estão certas nesse escopo — nenhuma
+    > das duas descreve o valor final.
+
 47. **`OrderSummary`: `Quote` e `Order` lidos pela mesma interface.** Antes de
     enviar, a coluna "Seus NFTs" lê a cotação; depois, lê o pedido — que é o
     snapshot imutável dela. Uma interface estrutural (`items`, `subtotalEth`,
@@ -1094,6 +1153,17 @@ como "Bloqueiam a fase 7" foram fechadas; o que abriu de novo está no fim.
   nada devolve. É comportamento de contrato da fase 1, com testes existentes, e
   **não foi alterado nesta fase** — conserto correto: mover o débito para
   `resolveOrderIfDue` (reservando no `pending`) e estornar no `declined`.
+
+  ✅ **RESOLVIDA depois da fase 7** (commit `25f3def`,
+  `fix(mocks): estorna carrinho e estoque em pedido recusado`). O débito
+  continua na criação — é reserva otimista deliberada, o que impede dois
+  pedidos concorrentes de levarem a mesma edição —, mas `resolveOrderIfDue`
+  agora chama `restoreDeclined()` no ramo `declined`
+  (`handlers/orders.ts:35-64`): devolve item a item o que foi debitado, recria
+  a linha do carrinho se ela já tinha sumido, e chama `bumpNftVersion` para o
+  estoque voltar em tempo real. Metade do conserto proposto (mover o débito)
+  foi descartada de propósito; a outra metade (estornar no `declined`) foi
+  feita. A afirmação "nada devolve" acima é **histórica, não o estado atual**.
 - **Timeout + refresh sem `?order=` não é recuperável.** Quando o `POST` falha
   como erro de rede o cliente nunca recebe o id, então não há o que colocar na
   URL. Recarregando ali, o usuário vê um checkout limpo com o carrinho já
@@ -1134,7 +1204,9 @@ Fecha as dívidas 6, 7 e 8 da seção "Dívidas para as fases 7 e 8". Spec:
     `Profile.username` (único, **409** com `details.username` em colisão, como
     o endereço de carteira já fazia) e `Profile.ensName`; `Wallet.type` (enum
     `metamask`/`walletconnect`/`coinbase`, derivado do que o pagamento mobile
-    oferece) e `Wallet.referralCode` (opcional). `SEED_VERSION` foi para 6 —
+    oferece) e `Wallet.referralCode` (opcional). `SEED_VERSION` foi para 6
+    nesta fase (valor em vigor depois do merge com a fase 7: **7** — ver a nota
+    da decisão 46 da fase 7) —
     sem o bump, um `localStorage` da fase anterior serviria perfil sem esses
     campos.
 
