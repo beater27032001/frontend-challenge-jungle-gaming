@@ -156,7 +156,7 @@ e o shell, verificáveis em 390, 768 e 1440.
 
 ## 9. Footer — node `70492:696`
 
-Três faixas empilhadas, largura total, conteúdo idêntico em todas as telas.
+Quatro faixas empilhadas, largura total, conteúdo idêntico em todas as telas.
 
 ### Faixa 1 — medalhões + newsletter (`bg-surface-card`, h 250, p 32)
 
@@ -206,8 +206,16 @@ Quatro colunas. Título 18px bold `leading-[16px]`; itens 14px regular
   `rounded-[6px]`, h 26, texto 9px bold em `text-accent`, `tracking-[0.1px]`,
   conteúdo `METAMASK  •  WALLETCONNECT  •  COINBASE`.
 
-Rodapé final, centralizado, 14px `leading-[30px]`:
+**Faixa 4 — copyright.** Largura total, fundo **`ink` `#140d0a`** — o mesmo da
+página: o rodapé termina e devolve o fundo do site, em vez de emendar na faixa
+de links. Texto centralizado, 14px `leading-[30px]`:
 `© 2026 Kurio. Propriedade digital para todos.`
+
+⚠️ **Correção (integração das fases 5–9).** Esta seção dizia "três faixas" e
+descrevia o copyright como texto solto, sem fundo próprio. A implementação
+seguiu à risca e o renderizou dentro da faixa 3, herdando `surface-card` — as
+duas se fundiam. São **quatro** faixas; a quarta é `ink`. Cor confirmada pelo
+usuário no Figma (`70492:696`).
 
 Ícones sociais: usar **lucide-react**, não baixar SVG.
 
