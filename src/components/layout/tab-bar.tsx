@@ -1,6 +1,7 @@
 import { Heart, House, Plus, ShoppingCart, User } from 'lucide-react'
 import { Link, useLocation } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
+import { useCartCount } from '@/features/cart/queries'
 import { cn, linkFocusRing } from '@/lib/utils'
 
 /**
@@ -10,6 +11,7 @@ import { cn, linkFocusRing } from '@/lib/utils'
 export function TabBar() {
   const pathname = useLocation({ select: (l) => l.pathname })
   const isHomeActive = pathname === '/'
+  const cartCount = useCartCount()
 
   return (
     <div className="fixed inset-x-0 bottom-0 z-40 h-[126px] lg:hidden">
@@ -60,14 +62,23 @@ export function TabBar() {
         >
           <Heart className="size-5" />
         </button>
-        <button
-          type="button"
-          disabled // fase 6 liga isto
-          aria-label="Carrinho"
-          className="flex flex-col items-center gap-1 text-text-secondary"
+        {/* Fase 6. Sem estado ativo: em `/carrinho` esta barra não é renderizada
+            (a folha Payment Summary ocupa o fundo — __root.tsx). */}
+        <Link
+          to="/carrinho"
+          aria-label={cartCount > 0 ? `Carrinho (${cartCount} ${cartCount === 1 ? 'item' : 'itens'})` : 'Carrinho'}
+          className={cn(linkFocusRing, 'relative flex flex-col items-center gap-1 text-text-secondary')}
         >
           <ShoppingCart className="size-5" />
-        </button>
+          {cartCount > 0 && (
+            <span
+              aria-hidden
+              className="absolute -right-2 -top-2 flex size-4 items-center justify-center rounded-full bg-primary text-tiny-10 font-bold text-primary-foreground"
+            >
+              {cartCount}
+            </span>
+          )}
+        </Link>
         <button
           type="button"
           disabled // fase 8 liga isto

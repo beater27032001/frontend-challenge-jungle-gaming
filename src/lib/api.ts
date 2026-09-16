@@ -47,3 +47,12 @@ api.interceptors.response.use(undefined, (error) => {
   }
   return Promise.reject(error)
 })
+
+/**
+ * Unwraps the `{ error: { code, message } }` envelope of `src/types/common.ts`
+ * from an Axios failure. Um lugar só: o carrinho precisa do `code` (cupom
+ * inválido vs. expirado vs. conflito de disponibilidade), não só da mensagem.
+ */
+export function apiErrorOf(error: unknown): ApiError['error'] | null {
+  return (isAxiosError<ApiError>(error) && error.response?.data?.error) || null
+}

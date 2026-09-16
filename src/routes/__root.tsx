@@ -29,15 +29,20 @@ function RootLayout() {
   // componente).
   const pathname = useLocation({ select: (l) => l.pathname })
   const isNftDetail = pathname.startsWith('/nft/')
-  // Fase 5 (specs/05-auth.md §8): no mobile, login/cadastro são telas
-  // cheias com a própria composição (logo, título, form) — sem
-  // MobileSearchBar/TabBar, mesmo tratamento do detalhe do NFT. No desktop
-  // o Header/Footer seguem normais; a rota renderiza a "aparência de modal"
-  // sobre o `<main>` (ver ARCHITECTURE.md — compromisso registrado: não é
-  // um catálogo de fato montado por trás, é `redirect` de volta à página de
-  // origem).
+  // Rotas que no mobile trazem composição própria e dispensam a
+  // MobileSearchBar e a TabBar:
+  //
+  // - `/nft/*` (fase 4): Buy Bar fixa de 164px no fundo.
+  // - `/login` e `/cadastro` (fase 5, specs/05-auth.md §8): telas cheias com
+  //   logo, título e form; nada no fundo. No desktop o Header/Footer seguem
+  //   normais e a rota renderiza a aparência de modal sobre o `<main>` — não
+  //   é um catálogo montado por trás, é `redirect` de volta à origem
+  //   (compromisso registrado no ARCHITECTURE.md).
+  // - `/carrinho` (fase 6, specs/06-carrinho.md §6): folha Payment Summary de
+  //   342px no fundo; o frame tem Screen Header próprio.
   const isAuthRoute = pathname === '/login' || pathname === '/cadastro'
-  const isBareMobile = isNftDetail || isAuthRoute
+  const isCart = pathname === '/carrinho'
+  const isBareMobile = isNftDetail || isAuthRoute || isCart
 
   return (
     <div className="min-h-dvh bg-background text-foreground">
@@ -50,12 +55,16 @@ function RootLayout() {
       <Header withDivider={!isNftDetail} />
       {!isBareMobile && <MobileSearchBar />}
       {/* pb-[126px] evita que a TabBar fixa encubra o fim do conteúdo em
-          telas < lg (critério 18); some em lg, onde não há TabBar. Em
-          /nft/* a Buy Bar (164px) ocupa esse lugar em vez da TabBar; em
-          /login e /cadastro a tela mobile não tem barra nenhuma no fundo. */}
+          telas < lg (critério 18); some em lg, onde não há TabBar. Cada rota
+          com composição própria paga o fundo que ela mesma ocupa: /carrinho
+          a folha de 342px, /nft/* a Buy Bar de 164px, e /login e /cadastro
+          nada, porque não têm barra no fundo. */}
       <main
         id="main"
-        className={cn(isNftDetail ? 'pb-[164px]' : isAuthRoute ? 'pb-0' : 'pb-[126px]', 'lg:pb-0')}
+        className={cn(
+          isCart ? 'pb-[358px]' : isNftDetail ? 'pb-[164px]' : isAuthRoute ? 'pb-0' : 'pb-[126px]',
+          'lg:pb-0',
+        )}
       >
         <Outlet />
       </main>
