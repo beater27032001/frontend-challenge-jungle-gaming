@@ -1,9 +1,10 @@
-import { ArrowLeft, Heart, Minus, Plus, ShoppingCart, Star } from 'lucide-react'
-import { useCanGoBack, useRouter } from '@tanstack/react-router'
+import { ArrowLeft, Heart, ShoppingCart, Star } from 'lucide-react'
+import { Link, useCanGoBack, useRouter } from '@tanstack/react-router'
+import { QuantityStepper } from '@/components/quantity-stepper'
 import type { NftDetailViewProps } from '@/features/nft/detail-state'
 import { mulQty } from '@/lib/money'
 import { cn } from '@/lib/utils'
-import { CATEGORY_LABELS } from '../labels'
+import { CATEGORY_LABELS, tokenIdOf } from '../labels'
 
 /**
  * Composição mobile (specs/04-detalhe-nft.md §4, node `15:5536`), `lg:hidden`
@@ -21,6 +22,8 @@ export function NftDetailMobile(props: NftDetailViewProps) {
     onSelectImage,
     onBuy,
     isBuying,
+    isFavorited,
+    onToggleFavorite,
   } = props
   const router = useRouter()
   const canGoBack = useCanGoBack()
@@ -28,7 +31,7 @@ export function NftDetailMobile(props: NftDetailViewProps) {
   const selectedEdition = nft.editions.find((e) => e.id === selectedEditionId) ?? null
   const allSoldOut = nft.editions.every((e) => e.available === 0)
   const totalPrice = selectedEdition ? mulQty(selectedEdition.priceEth, quantity) : nft.priceEth
-  const tokenId = `#${nft.id.replace('nft-', '').padStart(4, '0')}`
+  const tokenId = tokenIdOf(nft.id)
 
   function handleBack() {
     if (canGoBack) router.history.back()
@@ -56,11 +59,16 @@ export function NftDetailMobile(props: NftDetailViewProps) {
             </button>
             <button
               type="button"
-              disabled
+              onClick={onToggleFavorite}
               aria-label="Favoritar"
-              className="flex size-[35px] items-center justify-center rounded-[17.5px] border border-border-strong bg-surface-raised disabled:opacity-50"
+              aria-pressed={isFavorited}
+              className="flex size-[35px] items-center justify-center rounded-[17.5px] border border-border-strong bg-surface-raised"
             >
-              <Heart aria-hidden className="h-[14.2px] w-4 text-foreground" />
+              <Heart
+                aria-hidden
+                fill={isFavorited ? 'currentColor' : 'none'}
+                className={cn('h-[14.2px] w-4 text-foreground', isFavorited && 'text-text-accent')}
+              />
             </button>
           </div>
 
@@ -171,33 +179,16 @@ export function NftDetailMobile(props: NftDetailViewProps) {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-[8px]">
             <span className="text-body-15 font-medium text-text-secondary">Qtd.</span>
-            <div className="flex items-center gap-[12px]">
-              <button
-                type="button"
-                aria-label="Diminuir quantidade"
-                disabled={!selectedEdition || quantity <= 1}
-                onClick={() => onQuantityDelta(-1)}
-                className="flex h-[30px] w-[20px] items-center justify-center rounded-[20px] border border-[#140d0a] bg-primary drop-shadow-[0_4px_6px_rgba(20,13,10,0.15)] disabled:opacity-50"
-              >
-                <Minus aria-hidden className="size-4 text-primary-foreground" />
-              </button>
-              <span aria-live="polite" className="text-body-18 font-medium leading-[25px] text-foreground">
-                <span className="sr-only">Quantidade: </span>
-                {quantity}
-              </span>
-              <button
-                type="button"
-                aria-label="Aumentar quantidade"
-                disabled={!selectedEdition || quantity >= selectedEdition.available}
-                onClick={() => onQuantityDelta(1)}
-                className="flex h-[30px] w-[20px] items-center justify-center rounded-[20px] border border-[#140d0a] bg-primary drop-shadow-[0_4px_6px_rgba(20,13,10,0.15)] disabled:opacity-50"
-              >
-                <Plus aria-hidden className="size-4 text-primary-foreground" />
-              </button>
-            </div>
+            <QuantityStepper
+              quantity={quantity}
+              canDecrease={!!selectedEdition && quantity > 1}
+              canIncrease={!!selectedEdition && quantity < selectedEdition.available}
+              onDelta={onQuantityDelta}
+              numberClassName="text-body-18 font-medium leading-[25px]"
+            />
           </div>
 
-          <span className="text-title-20 leading-[16px] font-bold text-text-accent">{totalPrice} ETH</span>
+          <span data-testid="nft-price" className="text-title-20 leading-[16px] font-bold text-text-accent">{totalPrice} ETH</span>
         </div>
 
         <div className="flex items-center gap-[12px]">
@@ -216,14 +207,15 @@ export function NftDetailMobile(props: NftDetailViewProps) {
           >
             Comprar NFT
           </button>
-          <button
-            type="button"
-            disabled
+          {/* Fase 6: único caminho para o carrinho nesta tela — o frame mobile
+              do detalhe não tem TabBar (a Buy Bar ocupa o fundo). */}
+          <Link
+            to="/carrinho"
             aria-label="Carrinho"
-            className="flex size-[60px] items-center justify-center rounded-[40px] border border-border-strong bg-surface-raised p-[20px] disabled:opacity-50"
+            className="flex size-[60px] items-center justify-center rounded-[40px] border border-border-strong bg-surface-raised p-[20px] outline-none focus-visible:ring-[3px] focus-visible:ring-ring/75"
           >
             <ShoppingCart aria-hidden className="size-5 text-foreground" />
-          </button>
+          </Link>
         </div>
       </div>
     </div>

@@ -6,6 +6,7 @@ import type {
   Wallet,
 } from '@/types'
 import { buildInitialDb, refreshNftDerived, SEED_VERSION } from './fixtures'
+import { emitNftUpdated } from './realtime'
 
 /**
  * In-memory store backing every MSW handler, hydrated from and persisted to
@@ -18,7 +19,18 @@ const STORAGE_KEY = 'greenmint:db:v1'
 
 export interface Db {
   seedVersion: number
-  users: Array<SessionUser & { passwordHash: string; salt: string; bio: string; createdAt: string }>
+  // `username`/`ensName` (fase 8, spec 08 §2.4) ficam no registro do usuário e
+  // não em `SessionUser`: são campos de perfil, e a sessão não precisa deles.
+  users: Array<
+    SessionUser & {
+      passwordHash: string
+      salt: string
+      username: string
+      ensName: string
+      bio: string
+      createdAt: string
+    }
+  >
   sessions: Record<string /* token */, { userId: string; expiresAt: string }>
   nfts: NftDetail[]
   favorites: Record<string /* userId */, string[]>
@@ -75,12 +87,16 @@ export function resetDb(): void {
  * Marca um NFT como alterado: sobe a `version` E recalcula os campos derivados
  * do summary (`priceEth`, `available`). O nome fala só da versão por histórico —
  * chame isto após QUALQUER mutação de edição, nunca só `nft.version += 1`.
+ *
+ * Fase 9: é também o ponto único de emissão de `nft.updated`. Como toda
+ * mutação de edição passa por aqui, REST e evento não podem divergir (§6).
  */
 export function bumpNftVersion(nftId: string): void {
   const nft = db.nfts.find((n) => n.id === nftId)
   if (nft) {
     nft.version += 1
     refreshNftDerived(nft)
+    emitNftUpdated(nft)
   }
 }
 

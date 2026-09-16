@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { apiFetch, bootReset, clearCart, isExpectedBootNoise, setScenario } from './helpers'
+import { apiFetch, awaitMswReady, bootReset, clearCart, isExpectedBootNoise, setScenario } from './helpers'
 
 /**
  * Domínio detalhe (specs/04-detalhe-nft.md, fase 4) — substitui o stub de
@@ -288,7 +288,7 @@ test.describe('Galeria (critérios 10–12)', () => {
   })
 })
 
-test.describe('Breadcrumb e favoritar desabilitado (critérios 13–14)', () => {
+test.describe('Breadcrumb e favoritar (critérios 13–14)', () => {
   test('breadcrumb desktop: "Início" é link real para /, "Mercado" é o item atual sem ser link', async ({
     page,
   }) => {
@@ -302,13 +302,19 @@ test.describe('Breadcrumb e favoritar desabilitado (critérios 13–14)', () => 
 
     const mercado = nav.getByText('Mercado', { exact: true })
     await expect(mercado).toHaveAttribute('aria-current', 'page')
-    await expect(page.locator('a').filter({ hasText: 'Mercado' })).toHaveCount(0)
+    // Escopado ao breadcrumb, não à página: o header também tem um "Mercado",
+    // e esse É link de propósito. A asserção antiga varria `page.locator('a')`
+    // e quebrou quando o item do menu deixou de ser <span> inerte — locator
+    // amplo acusando defeito onde não há (CLAUDE.md, "Verificação").
+    await expect(nav.locator('a').filter({ hasText: 'Mercado' })).toHaveCount(0)
 
     await inicio.click()
     await expect(page).toHaveURL('/')
   })
 
-  test('favoritar desktop e coração mobile estão disabled e nunca disparam request', async ({ page }) => {
+  test('fase 5: visitante clica em Favoritar (desktop) e no coração (mobile) → abre o modal de login, nunca dispara /favorites', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
     await bootReset(page)
     await page.goto('/nft/nft-001')
@@ -319,13 +325,21 @@ test.describe('Breadcrumb e favoritar desabilitado (critérios 13–14)', () => 
     })
 
     const favDesktop = page.getByRole('button', { name: 'Favoritar' })
-    await expect(favDesktop).toBeDisabled()
-    await favDesktop.click({ force: true }).catch(() => {})
+    await expect(favDesktop).toBeEnabled()
+    await favDesktop.click()
+    // Fase 5 (specs/05-auth.md §9): rota real /login, não search param.
+    await expect(page).toHaveURL(/\/login\?redirect=/)
+    await expect(page.getByRole('tab', { name: 'Entrar' })).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(page).toHaveURL('/nft/nft-001')
 
+    await page.goto('/nft/nft-001')
+    await awaitMswReady(page)
     await page.setViewportSize({ width: 390, height: 844 })
     const favMobile = page.locator('button[aria-label="Favoritar"]').last()
-    await expect(favMobile).toBeDisabled()
-    await favMobile.click({ force: true }).catch(() => {})
+    await expect(favMobile).toBeEnabled()
+    await favMobile.click()
+    await expect(page).toHaveURL(/\/login\?redirect=/)
 
     expect(favoriteRequests).toBe(0)
   })

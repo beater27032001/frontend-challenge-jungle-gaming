@@ -1,5 +1,17 @@
 import { expect, test } from '@playwright/test'
-import { awaitMswReady, boot, isExpectedBootNoise, pressFirstTab } from './helpers'
+import {
+  addToCart,
+  ANA,
+  awaitMswReady,
+  boot,
+  BRUNO,
+  bootReset,
+  clearCart,
+  isExpectedBootNoise,
+  login,
+  pressFirstTab,
+  setScenario,
+} from './helpers'
 
 /**
  * Phase 1 runtime checks: things only observable against the real running
@@ -369,7 +381,7 @@ test.describe('Smoke', () => {
  * structure against `specs/02-design-system.md` §§2/9/10.
  */
 test.describe('Shell — desktop composition (>=1024, spec §2/§9)', () => {
-  test('header renders KURIO, the 4 nav items with Início active, and the disabled search/cart/Entrar controls', async ({
+  test('header renders KURIO, the 4 nav items with Início active, and the disabled cart / enabled Entrar controls', async ({
     page,
   }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
@@ -381,20 +393,45 @@ test.describe('Shell — desktop composition (>=1024, spec §2/§9)', () => {
 
     const inicio = header.getByRole('link', { name: 'Início' })
     await expect(inicio).toHaveClass(/text-text-accent/)
-    await expect(inicio).toHaveClass(/underline/)
+    // O item ativo é uma BARRA separada abaixo do item, não `text-decoration:
+    // underline` (que cola um risco na baseline). Medido, não só classe: 2px de
+    // altura, largura do item, em `primary`, abaixo da caixa do texto — e
+    // `text-decoration` tem de estar de volta em `none`.
+    await expect(inicio).toHaveCSS('text-decoration-line', 'none')
+    const bar = await inicio.evaluate((el) => {
+      const span = el.querySelector('span[aria-hidden]')
+      if (!span) return null
+      const b = span.getBoundingClientRect()
+      const a = el.getBoundingClientRect()
+      return {
+        height: b.height,
+        widthDelta: Math.round(b.width - a.width),
+        gapBelowText: Math.round(b.top - a.bottom),
+        bg: getComputedStyle(span).backgroundColor,
+      }
+    })
+    expect(bar).not.toBeNull()
+    expect(bar!.height).toBe(2)
+    expect(bar!.widthDelta).toBe(0)
+    expect(bar!.gapBelowText).toBe(7)
+    expect(bar!.bg).toBe('rgb(210, 138, 76)') // --color-primary #d28a4c
     for (const label of ['Mercado', 'Criadores', 'Aprenda']) {
       await expect(header.getByText(label, { exact: true })).toBeVisible()
     }
 
     const search = header.getByRole('button', { name: 'Buscar' })
-    const cart = header.getByRole('button', { name: 'Carrinho' })
-    const entrar = header.getByRole('button', { name: /Entrar/ })
-    // Busca inline (fase 3, resolução OQ1): o botão passa a ser funcional —
-    // só cart/Entrar seguem desabilitados (fases 5/6, sem consumidor ainda).
+    // Os dois viraram link: Carrinho na fase 6 e Entrar na fase 5. "Entrar"
+    // é <Button asChild><Link>…</Link></Button>, então a role acessível é
+    // "link" — o elemento real é um <a> estilizado de botão, não um button.
+    const cart = header.getByRole('link', { name: 'Carrinho' })
+    const entrar = header.getByRole('link', { name: /Entrar/ })
+    // Busca inline (fase 3, resolução OQ1): o botão passa a ser funcional.
+    // Nenhum dos três segue desabilitado a partir daqui.
     await expect(search).toBeEnabled()
     await expect(search).toHaveAttribute('aria-expanded', 'false')
-    await expect(cart).toBeDisabled()
-    await expect(entrar).toBeDisabled()
+    await expect(cart).toHaveAttribute('href', '/carrinho')
+    await expect(entrar).toBeVisible()
+    await expect(entrar).toHaveAttribute('href', '/login')
 
     const entrarBox = await entrar.boundingBox()
     expect(entrarBox?.width).toBe(100)
@@ -415,12 +452,21 @@ test.describe('Shell — desktop composition (>=1024, spec §2/§9)', () => {
     expect(rowBox!.width).toBeLessThan(viewportWidth)
   })
 
-  test('cart badge is absent from the DOM while the count is unwired (criterion 15)', async ({ page }) => {
+  test('cart badge appears only with a non-empty cart (criterion 15)', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
-    await boot(page)
-    // Phase 2 doesn't query the cart count (no consumer yet, spec §2) — the
-    // badge (16x16, only rendered when count > 0) must never appear.
-    await expect(page.locator('header [data-slot="badge"]')).toHaveCount(0)
+    await bootReset(page)
+    await clearCart(page)
+
+    // Carrinho vazio: o badge (16x16) não existe no DOM.
+    const cart = page.locator('header').getByRole('link', { name: /^Carrinho/ })
+    await expect(cart).toHaveAttribute('aria-label', 'Carrinho')
+    await expect(cart.locator('span')).toHaveCount(0)
+
+    // Fase 6: a contagem vem de GET /api/cart e soma quantidades, não linhas.
+    await addToCart(page, 'nft-003', 'nft-003-e1', 2)
+    await page.reload()
+    await expect(cart).toHaveAttribute('aria-label', 'Carrinho (2 itens)')
+    await expect(cart.locator('span')).toHaveText('2')
   })
 
   test('mobile search bar and tab bar are absent at desktop widths', async ({ page }) => {
@@ -457,8 +503,25 @@ test.describe('Shell — desktop composition (>=1024, spec §2/§9)', () => {
     const enviarRadius = await enviar.evaluate((el) => getComputedStyle(el).borderRadius)
     expect(enviarRadius).toBe('0px 6px 6px 0px')
 
-    // Band 2: brand band with the KURIO wordmark.
+    // Band 2: brand band with the KURIO wordmark. A cor É o requisito aqui
+    // (spec §9: faixa 2 em `surface-dark`, faixas 1 e 3 em `surface-card`) —
+    // asserir só o texto deixaria a faixa se fundir com as vizinhas sem que
+    // nada acusasse. Por isso as quatro cores juntas, na ordem: cada faixa
+    // tem de ser ela mesma E diferente da vizinha.
+    //
+    // A faixa 4 (copyright) é `ink`, o fundo da página: o rodapé termina e
+    // devolve o fundo do site. Ela era um <p> dentro da faixa 3, herdando
+    // `surface-card` — as duas se fundiam, e nada acusava.
     await expect(footer.getByText('KURIO', { exact: true })).toBeVisible()
+    const bandColors = await footer.evaluate((el) =>
+      [...el.children].map((c) => getComputedStyle(c).backgroundColor),
+    )
+    expect(bandColors).toEqual([
+      'rgb(36, 22, 18)', // --color-surface-card #241612
+      'rgb(56, 34, 15)', // --color-surface-dark  #38220f
+      'rgb(36, 22, 18)',
+      'rgb(20, 13, 10)', // --color-ink          #140d0a
+    ])
 
     // Band 3: the four link columns from spec §9.
     for (const title of ['Meu perfil', 'Central de ajuda', 'Coleções', 'Redes sociais']) {
@@ -466,6 +529,46 @@ test.describe('Shell — desktop composition (>=1024, spec §2/§9)', () => {
     }
     await expect(footer.getByText('METAMASK  •  WALLETCONNECT  •  COINBASE')).toBeVisible()
     await expect(footer.getByText('© 2026 Kurio. Propriedade digital para todos.')).toBeVisible()
+  })
+
+  // specs/04-detalhe-nft.md OQ5 (metadata do frame `10:244`): o container
+  // `Top` começa em y=24 e o `Main` em y=77 dentro dele, com o Header Row
+  // ocupando 45 — ou seja, 24 de respiro acima do header e 32 entre header e
+  // conteúdo. Medido no DOM, não lido do CSS: é a distância pintada que o
+  // Figma especifica.
+  test('o header não encosta no topo (24) e o conteúdo não encosta no header (32)', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await boot(page)
+
+    const geo = await page.evaluate(() => {
+      const row = document.querySelector('header')!.firstElementChild!.getBoundingClientRect()
+      const main = document.querySelector('main#main')!
+      const first = main.firstElementChild!.getBoundingClientRect()
+      return { rowTop: row.top, rowBottom: row.bottom, contentTop: first.top }
+    })
+    expect(geo.rowTop).toBe(24)
+    expect(geo.contentTop - geo.rowBottom).toBe(32)
+  })
+
+  // A tira preta no fim da página: com o shell em `block`, `min-h-dvh` estica
+  // o CONTAINER além do conteúdo e a sobra fica abaixo do rodapé, pintada de
+  // `ink`. Só aparece quando o conteúdo é mais curto que a viewport, por isso
+  // 1400 de altura e o carrinho vazio (medido no build antes da correção:
+  // 146px de sobra em /carrinho a 1440x1400; a home, longa, dava 0 e teria
+  // deixado a regressão passar).
+  test('nenhuma faixa pintada sobra abaixo do rodapé em página curta', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 1400 })
+    await page.goto('/carrinho')
+    await awaitMswReady(page)
+    await expect(page.locator('footer')).toBeVisible()
+
+    const strip = await page.evaluate(() => {
+      const f = document.querySelector('footer')!.getBoundingClientRect()
+      return document.documentElement.scrollHeight - (f.bottom + window.scrollY)
+    })
+    expect(strip).toBeLessThanOrEqual(1) // 1px de arredondamento de layout
   })
 })
 
@@ -526,38 +629,97 @@ test.describe('Shell — mobile composition (<1024, spec §10/§11)', () => {
     })
   }
 
-  test('Home is aria-current + non-chromatic dot indicator; the other 3 items have neither and are out of tab order (criterion 17)', async ({
+  test('Home is aria-current + non-chromatic dot indicator; Favoritos/FAB stay disabled and the other links carry neither (criterion 17)', async ({
     page,
   }) => {
     await page.setViewportSize({ width: 390, height: 844 })
     await boot(page)
 
     const nav = page.getByRole('navigation', { name: 'Navegação principal' })
-    const home = nav.getByRole('link')
+    // Escopo por href, não por role: a fase 6 ligou o Carrinho, então o nav
+    // tem dois links e um `getByRole('link')` solto dispararia strict mode.
+    const home = nav.locator('a[href="/"]')
     await expect(home).toHaveAttribute('aria-current', 'page')
     await expect(home).toHaveClass(/text-text-accent/)
     // Non-chromatic indicator: a 4px dot present only on the active item —
     // state is never color-only (ARCHITECTURE.md decision 4).
     await expect(home.locator('span[aria-hidden]')).toHaveCount(1)
 
-    for (const label of ['Favoritos', 'Carrinho', 'Perfil']) {
-      const btn = page.getByRole('button', { name: label })
-      await expect(btn).toBeDisabled()
-      await expect(btn).not.toHaveAttribute('aria-current', 'page')
-      await expect(btn.locator('span[aria-hidden]')).toHaveCount(0)
+    // Favoritos virou link para a home filtrada (`?fav=true`) — era o único
+    // caminho para os favoritos no mobile e ficou desabilitado desde a fase 4.
+    // Em `/` sem o parâmetro ele NÃO é o ativo: quem acende é Início. As duas
+    // metades juntas, porque a mesma rota serve os dois itens e um teste que
+    // só olhasse um deixaria passar os dois acesos ao mesmo tempo.
+    const favoritos = nav.locator('a[aria-label="Favoritos"]')
+    await expect(favoritos).toHaveCount(1)
+    await expect(favoritos).not.toHaveAttribute('aria-current', 'page')
+    await expect(favoritos.locator('span[aria-hidden]')).toHaveCount(0)
+
+    // Na visão de favoritos, o item que acende é Favoritos — mas por cor e
+    // ponto, não por `aria-current`. Favoritos é um FILTRO do catálogo
+    // (`/?fav=true`), como `?q=`, e não outra página: `aria-current="page"`
+    // segue no Início, que é onde o usuário de fato está. As duas metades
+    // juntas porque a mesma rota serve os dois itens — um teste que só
+    // olhasse um deixaria passar os dois acesos ao mesmo tempo.
+    await page.goto('/?fav=true')
+    const favAtivo = nav.locator('a[aria-label="Favoritos"]')
+    await expect(favAtivo).toHaveClass(/text-text-accent/)
+    await expect(favAtivo.locator('span[aria-hidden]')).toHaveCount(1)
+    const inicioNaVisaoFav = nav.locator('a[aria-label="Início"]')
+    await expect(inicioNaVisaoFav).not.toHaveClass(/text-text-accent/)
+    await expect(inicioNaVisaoFav.locator('span[aria-hidden]')).toHaveCount(0)
+    await page.goto('/')
+
+    // Carrinho (fase 6) e Perfil (fase 8) são links, e em `/` nenhum dos dois
+    // é o item ativo: sem `aria-current` e sem o ponto indicador (o badge do
+    // carrinho só nasce com contagem).
+    for (const href of ['/carrinho', '/perfil']) {
+      const link = nav.locator(`a[href="${href}"]`)
+      await expect(link).toHaveCount(1)
+      await expect(link).not.toHaveAttribute('aria-current', 'page')
+      await expect(link.locator('span[aria-hidden]')).toHaveCount(0)
     }
   })
 
-  test('scrolled to the end at 390, the tab bar never covers the last content of <main> (padding-bottom 126px, criterion 18)', async ({
+  test('scrolled to the end at 390, the tab bar never covers the last content of <main> (criterion 18)', async ({
     page,
   }) => {
     await page.setViewportSize({ width: 390, height: 844 })
     await boot(page)
 
-    const paddingBottom = await page
-      .locator('main#main')
-      .evaluate((el) => getComputedStyle(el).paddingBottom)
-    expect(paddingBottom).toBe('126px')
+    // Mede a intenção, não um número mágico. O padding antes era fixado em
+    // '126px' — a altura da tab bar — e o botão flutuante, que sobressai 33px
+    // acima dela, cobria a paginação sem que nada acusasse. O teste agora
+    // pergunta ao DOM qual é o elemento fixo que sobe mais no rodapé e exige
+    // que o padding cubra ATÉ ELE. Assim acompanha mudanças de layout e
+    // continua pegando a regressão real.
+    const { padding, needed } = await page.evaluate(() => {
+      const main = document.querySelector('main#main')!
+      const vh = window.innerHeight
+      const anchored = [...document.body.querySelectorAll('*')].filter((el) => {
+        const st = getComputedStyle(el)
+        if (st.position !== 'fixed' || st.visibility === 'hidden') return false
+        const r = el.getBoundingClientRect()
+        return r.height > 0 && r.bottom > vh - 8 // ancorado no fundo
+      })
+      // Inclui os DESCENDENTES: o botão flutuante é `absolute` dentro da tab
+      // bar fixa e sobressai 32px acima dela. Medir só os elementos `fixed`
+      // dava a altura da barra e ignorava o botão — foi assim que ele passou
+      // a cobrir a paginação sem nada acusar.
+      const topOfBottomChrome = anchored
+        .flatMap((el) => [el, ...el.querySelectorAll('*')])
+        .filter((el) => {
+          const r = el.getBoundingClientRect()
+          return r.height > 0 && r.width > 0 && getComputedStyle(el).visibility !== 'hidden'
+        })
+        .reduce((min, el) => Math.min(min, el.getBoundingClientRect().top), vh)
+      return {
+        padding: Number.parseFloat(getComputedStyle(main).paddingBottom),
+        needed: Math.ceil(vh - topOfBottomChrome),
+      }
+    })
+    expect(needed).toBeGreaterThan(0) // há cromo fixo no rodapé, senão o teste não prova nada
+    expect(padding).toBeGreaterThanOrEqual(needed)
   })
 })
 
@@ -612,6 +774,12 @@ test.describe('Accessibility — keyboard navigation and focus (criterion 24)', 
     await page.keyboard.press('Tab')
     await expect(page.getByRole('link', { name: 'Início' })).toBeFocused()
 
+    // "Mercado" entra na ordem de tabulação: deixou de ser <span> inerte e
+    // virou link para a grade do catálogo. Criadores e Aprenda seguem fora,
+    // porque continuam sem destino — se um dia virarem link, este teste cai.
+    await page.keyboard.press('Tab') // Mercado
+    await expect(page.getByRole('link', { name: 'Mercado' })).toBeFocused()
+
     // Fase 3: o botão de busca do header deixa de ser disabled (busca
     // inline, resolução OQ1) — é o próximo stop, não mais a newsletter do
     // footer (agora precedida por todo o conteúdo real do catálogo). O
@@ -620,7 +788,7 @@ test.describe('Accessibility — keyboard navigation and focus (criterion 24)', 
     await expect(page.getByRole('button', { name: 'Buscar' })).toBeFocused()
   })
 
-  test('mobile: skip-link then the search bar controls are the next stops; Favoritos/Carrinho/Perfil/FAB stay disabled and out of tab order', async ({
+  test('mobile: skip-link then the search bar controls are the next stops; Favoritos/FAB stay disabled and out of tab order', async ({
     page,
   }) => {
     await page.setViewportSize({ width: 390, height: 844 })
@@ -643,12 +811,19 @@ test.describe('Accessibility — keyboard navigation and focus (criterion 24)', 
     await page.keyboard.press('Tab')
     await expect(page.getByRole('button', { name: 'Filtrar' })).toBeFocused()
 
-    // Favoritos/Carrinho/Perfil (tab bar) e o FAB seguem sem consumidor
-    // (fases 4/6/8): `disabled` já é suficiente para excluí-los da ordem de
-    // tabulação, sem precisar percorrer todo o catálogo até a tab bar.
-    for (const label of ['Favoritos', 'Carrinho', 'Perfil', 'Criar']) {
-      await expect(page.getByRole('button', { name: label })).toBeDisabled()
-    }
+    // Favoritos (tab bar) e o FAB seguem sem consumidor (fase 4): `disabled`
+    // já é suficiente para excluí-los da ordem de tabulação, sem precisar
+    // percorrer todo o catálogo até a tab bar. Carrinho saiu desta lista na
+    // fase 6 e Perfil na fase 8 — os dois são links e ESTÃO na ordem de
+    // tabulação, de propósito (o passeio por teclado de cada um fica em
+    // e2e/cart.spec.ts e e2e/account.spec.ts).
+    // "Criar" segue sem consumidor e `disabled` basta para tirá-lo da ordem
+    // de tabulação. Favoritos saiu desta lista: virou link e ESTÁ na ordem,
+    // de propósito — o passeio por teclado fica no teste do item ativo acima.
+    await expect(page.getByRole('button', { name: 'Criar' })).toBeDisabled()
+    const tabBar = page.getByRole('navigation', { name: 'Navegação principal' })
+    await expect(tabBar.locator('a[href="/carrinho"]')).toBeVisible()
+    await expect(tabBar.locator('a[href="/perfil"]')).toBeVisible()
   })
 })
 
@@ -1019,7 +1194,7 @@ test.describe('plain <Link> elements render the --ring token on focus-visible (f
     // para alcançar Home deixou de ser fixo — foca o link diretamente
     // (`.focus()` programático ainda ativa `:focus-visible` no Chromium),
     // preservando o que este teste de fato verifica: o token do anel.
-    await page.getByRole('navigation', { name: 'Navegação principal' }).getByRole('link').focus()
+    await page.getByRole('navigation', { name: 'Navegação principal' }).locator('a[href="/"]').focus()
     const homeStyle = await page.evaluate(() => {
       const cs = getComputedStyle(document.activeElement!)
       return {
@@ -1221,7 +1396,7 @@ test.describe('Focus ring on plain <Link> does not clip or overlap neighbouring 
 
     // Mesmo racional do teste de ring acima: foca Home diretamente em vez
     // de contar Tabs através do conteúdo real do catálogo.
-    await page.getByRole('navigation', { name: 'Navegação principal' }).getByRole('link').focus()
+    await page.getByRole('navigation', { name: 'Navegação principal' }).locator('a[href="/"]').focus()
     const overflowChain = await page.evaluate(() => {
       const chain: string[] = []
       let el: Element | null = document.activeElement
@@ -1237,7 +1412,7 @@ test.describe('Focus ring on plain <Link> does not clip or overlap neighbouring 
       const home = document.activeElement!
       const nav = home.parentElement! // <nav>, items are its direct children
       const idx = Array.from(nav.children).indexOf(home)
-      const next = nav.children[idx + 1] // the disabled "Favoritos" button
+      const next = nav.children[idx + 1] // "Favoritos" (link desde a integração)
       return {
         homeRect: home.getBoundingClientRect().toJSON(),
         nextRect: next.getBoundingClientRect().toJSON(),
@@ -1264,7 +1439,7 @@ test.describe('Focus ring on plain <Link> does not clip or overlap neighbouring 
     await boot(page)
 
     // Mesmo racional dos dois testes acima: foca Home diretamente.
-    await page.getByRole('navigation', { name: 'Navegação principal' }).getByRole('link').focus()
+    await page.getByRole('navigation', { name: 'Navegação principal' }).locator('a[href="/"]').focus()
 
     const { ringColorRaw, inkHex, surfaceCardHex } = await page.evaluate(() => {
       const ringColorRaw = getComputedStyle(document.activeElement!).getPropertyValue(
@@ -1359,6 +1534,11 @@ test.describe('Full breakpoint round-trip (fix iteration 1 regression): 1440 -> 
     await expect(page.getByRole('link', { name: 'KURIO' }).first()).toBeFocused()
     await page.keyboard.press('Tab') // Início
     await expect(page.getByRole('link', { name: 'Início' })).toBeFocused()
+    // "Mercado" entra na ordem de tabulação: deixou de ser <span> inerte e
+    // virou link para a grade do catálogo. Criadores e Aprenda seguem fora,
+    // porque continuam sem destino — se um dia virarem link, este teste cai.
+    await page.keyboard.press('Tab') // Mercado
+    await expect(page.getByRole('link', { name: 'Mercado' })).toBeFocused()
     // Fase 3: o botão de busca do header não é mais disabled (busca inline).
     await page.keyboard.press('Tab')
     await expect(page.getByRole('button', { name: 'Buscar' })).toBeFocused()
@@ -1394,5 +1574,349 @@ test.describe('Full breakpoint round-trip (fix iteration 1 regression): 1440 -> 
     ).toBe(true)
 
     expect(consoleErrors.filter((msg) => !isExpectedBootNoise(msg))).toEqual([])
+  })
+})
+
+/**
+ * Fase 5 (specs/05-auth.md): `/login` e `/cadastro` são rotas reais (não
+ * search param — §9), com composição desktop (Dialog do Radix, focus trap/
+ * Esc nativos) e mobile (tela cheia, `LoginMobile`/`RegisterMobile`)
+ * distintas. `redirect` carrega a página de origem, a sessão persiste após
+ * refresh, a higiene de cache no login/logout (§11, eliminatório), o
+ * interceptor de `session_expired`, e favoritos otimistas com rollback (§4,
+ * exigência ainda não cumprida por nenhuma fase anterior). Todos os testes
+ * de composição desktop fixam 1440 explicitamente — a mesma rota também
+ * roda `LoginMobile`/`RegisterMobile` sob 390, com cópia própria (spec §8),
+ * cobertos num describe dedicado abaixo.
+ */
+test.describe('Login/cadastro — composição desktop (fase 5, specs/05-auth.md §3/§7)', () => {
+  test('/login direto por URL abre o Dialog sobre o catálogo; Esc navega para o redirect', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.goto('/login?redirect=%2F%3Fq%3Darte')
+    await awaitMswReady(page)
+    await expect(page.getByRole('dialog')).toBeVisible()
+    await expect(page.getByRole('tab', { name: 'Entrar' })).toHaveAttribute('aria-selected', 'true')
+
+    await page.keyboard.press('Escape')
+    await expect(page).toHaveURL(/q=arte/)
+    await expect(page).not.toHaveURL(/\/login/)
+  })
+
+  test('?redirect= inválido (não começa com /) degrada para "/" via .catch, sem crash', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.goto('/login?redirect=https://evil.example.com')
+    await awaitMswReady(page)
+    await expect(page.getByRole('dialog')).toBeVisible()
+
+    await page.keyboard.press('Escape')
+    await expect(page).toHaveURL('/')
+  })
+
+  test('trocar de aba navega para /cadastro (rota real) sem vazar valor de um form no outro', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.goto('/login')
+    await awaitMswReady(page)
+    await page.getByRole('dialog').getByPlaceholder('E-mail').fill('rascunho@exemplo.com')
+
+    await page.getByRole('tab', { name: 'Criar conta' }).click()
+    await expect(page).toHaveURL('/cadastro')
+    await expect(page.getByRole('dialog').getByPlaceholder('Nome de usuário')).toBeVisible()
+    await expect(page.getByRole('dialog').getByPlaceholder('Digite seu e-mail')).toHaveValue('')
+
+    await page.getByRole('tab', { name: 'Entrar' }).click()
+    await expect(page).toHaveURL('/login')
+    await expect(page.getByRole('dialog').getByPlaceholder('E-mail')).toHaveValue('')
+  })
+
+  test('login com senha errada mostra "E-mail ou senha inválidos." sem fechar o Dialog; credencial válida navega ao redirect e liga o header logado', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await bootReset(page)
+    await page.goto('/login?redirect=%2Fnft%2Fnft-001')
+    await awaitMswReady(page)
+
+    await page.getByRole('dialog').getByPlaceholder('E-mail').fill(ANA.email)
+    await page.getByRole('dialog').getByPlaceholder('Senha', { exact: true }).fill('senha-errada')
+    await page.getByRole('dialog').getByRole('button', { name: 'Entrar', exact: true }).click()
+
+    await expect(page.getByRole('alert')).toHaveText('E-mail ou senha inválidos.')
+    await expect(page.getByRole('dialog')).toBeVisible()
+
+    await page.getByRole('dialog').getByPlaceholder('Senha', { exact: true }).fill(ANA.password)
+    await page.getByRole('dialog').getByRole('button', { name: 'Entrar', exact: true }).click()
+
+    await expect(page).toHaveURL('/nft/nft-001')
+    await expect(page.getByRole('button', { name: 'Sair' })).toBeVisible()
+
+    // Critério 4: refresh mantém a sessão (cookie + GET /auth/session).
+    await page.reload()
+    await awaitMswReady(page)
+    await expect(page.getByRole('button', { name: 'Sair' })).toBeVisible()
+  })
+
+  test('cadastro com register-conflict mostra erro no campo e-mail; com default e e-mail novo autentica e navega ao redirect', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await bootReset(page)
+    await setScenario(page, 'register-conflict')
+    await page.goto('/cadastro')
+    await awaitMswReady(page)
+
+    await page.getByRole('dialog').getByPlaceholder('Nome de usuário').fill('Visitante Novo')
+    await page.getByRole('dialog').getByPlaceholder('Digite seu e-mail').fill(`novo-${Date.now()}@exemplo.com`)
+    await page.getByRole('dialog').getByPlaceholder('Senha', { exact: true }).fill('senha12345')
+    await page.getByRole('dialog').getByPlaceholder('Confirmar senha').fill('senha12345')
+    await page.getByRole('dialog').getByRole('button', { name: 'Criar conta', exact: true }).click()
+
+    await expect(page.getByText('Este e-mail já está cadastrado.')).toBeVisible()
+    await expect(page.getByRole('dialog')).toBeVisible()
+
+    await setScenario(page, 'default')
+    await page.getByRole('dialog').getByRole('button', { name: 'Criar conta', exact: true }).click()
+
+    await expect(page).toHaveURL('/')
+    await expect(page.getByRole('button', { name: 'Sair' })).toBeVisible()
+  })
+
+  test('cadastro com senhas divergentes é barrado no cliente, sem request (zod antes da API)', async ({
+    page,
+  }) => {
+    let registerRequests = 0
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await bootReset(page)
+    await page.goto('/cadastro')
+    await awaitMswReady(page)
+    page.on('request', (req) => {
+      if (req.url().includes('/api/auth/register')) registerRequests += 1
+    })
+
+    await page.getByRole('dialog').getByPlaceholder('Nome de usuário').fill('Alguém')
+    await page.getByRole('dialog').getByPlaceholder('Digite seu e-mail').fill('alguem@exemplo.com')
+    await page.getByRole('dialog').getByPlaceholder('Senha', { exact: true }).fill('senha12345')
+    await page.getByRole('dialog').getByPlaceholder('Confirmar senha').fill('outra-coisa')
+    await page.getByRole('dialog').getByRole('button', { name: 'Criar conta', exact: true }).click()
+
+    await expect(page.getByText('As senhas não coincidem.')).toBeVisible()
+    await expect(page.getByRole('dialog')).toBeVisible()
+    expect(registerRequests).toBe(0)
+  })
+
+  test('Google, Facebook e "Esqueceu a senha?" nunca disparam request nem aparentam sucesso', async ({
+    page,
+  }) => {
+    let socialRequests = 0
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.goto('/login')
+    await awaitMswReady(page)
+    page.on('request', (req) => {
+      const url = req.url()
+      if (url.includes('google') || url.includes('facebook')) socialRequests += 1
+    })
+
+    const google = page.getByRole('button', { name: /Continuar com Google/ })
+    const facebook = page.getByRole('button', { name: /Continuar com Facebook/ })
+    const forgot = page.getByRole('button', { name: 'Esqueceu a senha?' })
+
+    await expect(google).toBeDisabled()
+    await expect(facebook).toBeDisabled()
+    await expect(forgot).toBeDisabled()
+    await expect(forgot).toHaveAttribute('title', /backend/)
+
+    expect(socialRequests).toBe(0)
+  })
+})
+
+test.describe('Login/cadastro — composição mobile (fase 5, specs/05-auth.md §8)', () => {
+  test('/login e /cadastro são telas cheias no mobile, com o link para a outra tela, sem TabBar/MobileSearchBar', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 })
+    await page.goto('/login')
+    await awaitMswReady(page)
+
+    await expect(page.getByRole('dialog')).toBeHidden() // Dialog não monta em <lg
+    // `main` isola o "KURIO" próprio da tela mobile do header/footer, que
+    // seguem no DOM (`hidden lg:*`) — mesmo texto, elemento diferente.
+    await expect(page.locator('main').getByText('KURIO', { exact: true })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Entrar' })).toBeVisible()
+    await expect(page.getByRole('navigation', { name: 'Navegação principal' })).toBeHidden()
+
+    await page.getByRole('link', { name: 'Crie uma conta' }).click()
+    await expect(page).toHaveURL('/cadastro')
+    await expect(page.getByRole('heading', { name: 'Criar perfil de colecionador' })).toBeVisible()
+    await expect(page.getByPlaceholder('Nome de usuário')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Criar perfil' })).toBeVisible()
+
+    await page.getByRole('link', { name: 'Entre', exact: true }).click()
+    await expect(page).toHaveURL('/login')
+  })
+
+  test('login mobile com credencial válida navega ao redirect', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 })
+    await bootReset(page)
+    await page.goto('/login')
+    await awaitMswReady(page)
+
+    await page.getByPlaceholder('contato@email.com').fill(ANA.email)
+    await page.getByPlaceholder('Senha', { exact: true }).fill(ANA.password)
+    await page.getByRole('button', { name: 'Entrar', exact: true }).click()
+
+    await expect(page).toHaveURL('/')
+  })
+})
+
+test.describe('Logout limpa o cache (fase 5, §11 eliminatório) — prova de zero vazamento entre usuários', () => {
+  test('favoritar como Ana, deslogar, logar como Bruno: o coração de Bruno nunca herda o favorito de Ana', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await bootReset(page)
+    await page.goto('/')
+    await awaitMswReady(page)
+
+    await page.goto('/login')
+    await awaitMswReady(page)
+    await page.getByRole('dialog').getByPlaceholder('E-mail').fill(ANA.email)
+    await page.getByRole('dialog').getByPlaceholder('Senha', { exact: true }).fill(ANA.password)
+    await page.getByRole('dialog').getByRole('button', { name: 'Entrar', exact: true }).click()
+    await expect(page.getByRole('button', { name: 'Sair' })).toBeVisible()
+
+    // Ana favorita o primeiro NFT do catálogo (card mobile — o único com
+    // coração nesta fase); nft-005 não está em nenhuma fixture de
+    // favoritos (Ana: nft-002/007/021, Bruno: nft-001), então o estado
+    // inicial é conhecido: não favoritado.
+    await page.setViewportSize({ width: 390, height: 844 })
+    const heart = page.getByRole('button', { name: 'Favoritar' }).first()
+    // Espera o PUT assentar no servidor antes de deslogar — só o estado
+    // otimista (instantâneo) não prova que o favorito de fato existe na
+    // sessão de Ana quando o logout roda a seguir.
+    const [heartResponse] = await Promise.all([
+      page.waitForResponse((res) => res.url().includes('/api/favorites/') && res.request().method() === 'PUT'),
+      heart.click(),
+    ])
+    expect(heartResponse.status()).toBe(200)
+    await expect(heart).toHaveAttribute('aria-pressed', 'true')
+
+    // O botão Sair só existe no header desktop nesta fase (dívida da fase 8
+    // registrada em ARCHITECTURE.md) — volta para 1440 para acioná-lo.
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.getByRole('button', { name: 'Sair' }).click()
+    // Header logado usa <Button asChild><Link>...</Link></Button> — a role
+    // acessível é "link", não "button" (mesmo elemento estilizado de botão).
+    await expect(page.getByRole('link', { name: 'Entrar' })).toBeVisible()
+
+    // Visitante: o mesmo card nunca mostra o favorito de Ana (cache foi
+    // limpo, não invalidado — nem por um frame).
+    await page.setViewportSize({ width: 390, height: 844 })
+    const guestHeart = page.getByRole('button', { name: 'Favoritar' }).first()
+    await expect(guestHeart).toHaveAttribute('aria-pressed', 'false')
+
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.goto('/login')
+    await awaitMswReady(page)
+    await page.getByRole('dialog').getByPlaceholder('E-mail').fill(BRUNO.email)
+    await page.getByRole('dialog').getByPlaceholder('Senha', { exact: true }).fill(BRUNO.password)
+    await page.getByRole('dialog').getByRole('button', { name: 'Entrar', exact: true }).click()
+    await expect(page).toHaveURL('/')
+
+    await page.setViewportSize({ width: 390, height: 844 })
+    const brunoHeart = page.getByRole('button', { name: 'Favoritar' }).first()
+    await expect(brunoHeart).toHaveAttribute('aria-pressed', 'false')
+  })
+})
+
+test.describe('Favoritos otimistas com rollback (fase 5, §4 — exigência ainda não cumprida por nenhuma fase)', () => {
+  // nft-005 não está em nenhuma fixture de favoritos (Ana: nft-002/007/021,
+  // Bruno: nft-001) — estado inicial conhecido: não favoritado.
+  test('cenário slow: o coração reflete o toggle antes da resposta do servidor', async ({ page }) => {
+    await bootReset(page)
+    await login(page, ANA)
+    await page.goto('/nft/nft-005')
+    await awaitMswReady(page)
+    await setScenario(page, 'slow')
+
+    const heart = page.getByRole('button', { name: 'Favoritar' })
+    await expect(heart).toHaveAttribute('aria-pressed', 'false')
+    await heart.click()
+    // Otimista: reflete ANTES da resposta (2500ms do cenário slow) — a
+    // asserção roda bem antes desse teto.
+    await expect(heart).toHaveAttribute('aria-pressed', 'true', { timeout: 500 })
+  })
+
+  test('cenário server-error: o coração reverte ao estado anterior e aparece um toast de erro', async ({
+    page,
+  }) => {
+    await bootReset(page)
+    await login(page, ANA)
+    await page.goto('/nft/nft-005')
+    await awaitMswReady(page)
+
+    const heart = page.getByRole('button', { name: 'Favoritar' })
+    await expect(heart).toHaveAttribute('aria-pressed', 'false')
+
+    await setScenario(page, 'server-error')
+    await heart.click()
+
+    await expect(heart).toHaveAttribute('aria-pressed', 'true') // otimista, antes do rollback
+    await expect(heart).toHaveAttribute('aria-pressed', 'false') // rollback (onError)
+    // O cenário `server-error` responde com a mensagem da API ("Falha
+    // transitória do servidor."), que o toast repassa — não o fallback
+    // genérico de `useToggleFavorite` (só usado sem corpo de erro).
+    await expect(page.getByText('Falha transitória do servidor.')).toBeVisible()
+  })
+
+  test('favoritar e refresh: o coração continua preenchido (GET /favorites)', async ({ page }) => {
+    await bootReset(page)
+    await login(page, ANA)
+    await page.goto('/nft/nft-005')
+    await awaitMswReady(page)
+
+    const heart = page.getByRole('button', { name: 'Favoritar' })
+    // Otimista mostra `true` antes da rede — `page.reload()` cortaria o PUT
+    // em voo se disparado nesse instante. `waitForResponse` espera o
+    // servidor confirmar antes de recarregar.
+    const [response] = await Promise.all([
+      page.waitForResponse((res) => res.url().includes('/api/favorites/') && res.request().method() === 'PUT'),
+      heart.click(),
+    ])
+    expect(response.status()).toBe(200)
+    await expect(heart).toHaveAttribute('aria-pressed', 'true')
+
+    await page.reload()
+    await awaitMswReady(page)
+    await expect(page.getByRole('button', { name: 'Favoritar' })).toHaveAttribute('aria-pressed', 'true')
+  })
+})
+
+test.describe('Sessão expirada durante a navegação (fase 5, §4/§6 — cenário session-expired, primeiro consumidor)', () => {
+  test('togglar favorito com session-expired ativo dispara toast + navega para /login com redirect de volta à página', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await bootReset(page)
+    await login(page, ANA)
+    await page.goto('/nft/nft-005')
+    await awaitMswReady(page)
+    // `awaitMswReady` só garante que os mocks estão de pé, não que o GET
+    // /favorites do carregamento da página já assentou — trocar o cenário
+    // com ele ainda em voo faria ESSA resposta (não o clique) disparar o
+    // session_expired primeiro, antes do teste sequer clicar.
+    const heart = page.getByRole('button', { name: 'Favoritar' })
+    await expect(heart).toHaveAttribute('aria-pressed', 'false')
+
+    await setScenario(page, 'session-expired')
+    await heart.click()
+
+    await expect(page.getByText('Sessão expirada. Entre novamente para continuar.')).toBeVisible()
+    await expect(page).toHaveURL(/\/login/)
+    await expect(page).toHaveURL(/redirect=.*nft-005/)
+    await expect(page.getByRole('dialog')).toBeVisible()
+    await expect(page.getByRole('tab', { name: 'Entrar' })).toHaveAttribute('aria-selected', 'true')
   })
 })

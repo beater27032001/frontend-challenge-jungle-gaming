@@ -2,6 +2,9 @@ import { LogIn, Search, ShoppingCart } from 'lucide-react'
 import { Link, useLocation, useNavigate, useSearch } from '@tanstack/react-router'
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { useLogout } from '@/features/auth/use-auth'
+import { useSession } from '@/features/auth/use-session'
+import { useCartCount } from '@/features/cart/queries'
 import type { CatalogSearch } from '@/features/nft/search-params'
 import { cn, linkFocusRing } from '@/lib/utils'
 
@@ -16,13 +19,32 @@ import { cn, linkFocusRing } from '@/lib/utils'
 // fluxo de mercado (specs/02-design-system.md §2) mesmo sem Link próprio.
 function activeNavLabel(pathname: string): 'Início' | 'Mercado' | null {
   if (pathname === '/') return 'Início'
-  if (pathname.startsWith('/nft')) return 'Mercado'
+  // Fase 7: o spec 07 §2 desenha o header do Pagamento com "Mercado" ativo — o
+  // checkout é a ponta do fluxo de mercado, não uma seção própria.
+  if (pathname.startsWith('/nft') || pathname === '/pagamento') return 'Mercado'
   return null
+}
+
+// `leading-[16px]` iguala a caixa de linha ao glifo de 16px, como em toda a
+// escala do Figma — é o que ancora a barra do item ativo a uma distância
+// previsível do texto, em vez de a uma entrelinha herdada do body.
+const NAV_ITEM = 'relative text-body-16 leading-[16px]'
+
+/**
+ * Item ativo da nav: no Figma é uma BARRA separada abaixo do item, não
+ * `text-decoration: underline` (que cola um risco na baseline). Mesma
+ * construção já usada nas abas do catálogo (`catalog-toolbar.tsx`, de
+ * specs/03-catalogo.md §2: barra de 2px em `primary`, 7px abaixo da caixa de
+ * 16px do texto) — a única geometria de sublinhado ativo que os specs medem.
+ */
+function ActiveBar() {
+  return <span aria-hidden className="absolute top-full left-0 mt-[7px] h-[2px] w-full bg-primary" />
 }
 
 export function Header({ withDivider = true }: { withDivider?: boolean }) {
   const pathname = useLocation({ select: (l) => l.pathname })
   const active = activeNavLabel(pathname)
+  const cartCount = useCartCount()
 
   // Busca inline (resolução OQ1, specs/03-catalogo.md): o Figma só desenha o
   // ícone de 20x20, sem estado expandido — desvio consciente registrado em
@@ -30,6 +52,8 @@ export function Header({ withDivider = true }: { withDivider?: boolean }) {
   // montado pelo __root em toda rota, não só em '/'.
   const search = useSearch({ strict: false }) as Partial<CatalogSearch>
   const navigate = useNavigate()
+  const session = useSession()
+  const logout = useLogout()
   const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
@@ -54,7 +78,10 @@ export function Header({ withDivider = true }: { withDivider?: boolean }) {
   }
 
   return (
-    <header className="hidden lg:block">
+    // pt-6: o container `Top` do frame desktop começa em y=24 (specs/04-detalhe-nft.md
+    // OQ5) — o header nunca encosta no topo do frame. O respiro é do shell, por isso
+    // mora aqui e não em cada rota.
+    <header className="hidden pt-6 lg:block">
       {/* A régua acompanha a coluna de 1200 (Figma 70522:3240), não sangra a
           largura toda da viewport. */}
       <div
@@ -78,23 +105,32 @@ export function Header({ withDivider = true }: { withDivider?: boolean }) {
             aria-current={active === 'Início' ? 'page' : undefined}
             className={cn(
               linkFocusRing,
-              'text-body-16',
-              active === 'Início' ? 'text-text-accent underline' : 'text-foreground',
+              NAV_ITEM,
+              active === 'Início' ? 'text-text-accent' : 'text-foreground',
             )}
           >
             Início
+            {active === 'Início' && <ActiveBar />}
           </Link>
-          {/* Mercado/Criadores/Aprenda não têm rota ainda — um link falso é
-              pior a11y que texto simples; viram <Link> quando a rota nascer.
-              Mercado já recebe o estilo ativo no fluxo de mercado. */}
-          <span
+          {/* "Mercado" é a grade do catálogo, que vive na própria home — vai
+              para lá e ancora na seção, em vez de ser texto morto. Criadores e
+              Aprenda não têm destino algum: link falso é pior a11y que texto
+              simples, então seguem inertes até a rota nascer. */}
+          <Link
+            to="/"
+            hash="catalogo"
             aria-current={active === 'Mercado' ? 'page' : undefined}
-            className={cn('text-body-16', active === 'Mercado' ? 'text-text-accent underline' : 'text-foreground')}
+            className={cn(
+              NAV_ITEM,
+              linkFocusRing,
+              active === 'Mercado' ? 'text-text-accent' : 'text-foreground',
+            )}
           >
             Mercado
-          </span>
-          <span className="text-body-16 text-foreground">Criadores</span>
-          <span className="text-body-16 text-foreground">Aprenda</span>
+            {active === 'Mercado' && <ActiveBar />}
+          </Link>
+          <span className={cn(NAV_ITEM, 'text-foreground')}>Criadores</span>
+          <span className={cn(NAV_ITEM, 'text-foreground')}>Aprenda</span>
         </nav>
 
         <div className="flex items-center gap-4">
@@ -135,17 +171,61 @@ export function Header({ withDivider = true }: { withDivider?: boolean }) {
             >
               <Search className="size-5" />
             </button>
-            <button type="button" disabled aria-label="Carrinho" className="relative disabled:opacity-50">
-              {/* fase 6 liga isto — contagem não é buscada nesta fase (sem
-                  query), então o badge (16x16, só com contagem > 0) nunca
-                  aparece aqui. */}
+            <Link
+              to="/carrinho"
+              aria-label={cartCount > 0 ? `Carrinho (${cartCount} ${cartCount === 1 ? 'item' : 'itens'})` : 'Carrinho'}
+              className={cn(linkFocusRing, 'relative')}
+            >
               <ShoppingCart className="size-6" />
-            </button>
-            <Button disabled className="h-[35px] w-[100px] gap-1 text-body-16 text-primary-foreground">
-              {/* fase 5 liga isto */}
-              <LogIn className="size-5" />
-              Entrar
-            </Button>
+              {/* Badge 16x16, só com contagem > 0 (fase 6). */}
+              {cartCount > 0 && (
+                <span
+                  aria-hidden
+                  data-testid="cart-count"
+                  className="absolute -right-2 -top-2 flex size-4 items-center justify-center rounded-full bg-primary text-tiny-10 font-bold text-primary-foreground"
+                >
+                  {cartCount}
+                </span>
+              )}
+            </Link>
+            {session.data ? (
+              <div className="flex items-center gap-3">
+                {/* Avatar e nome são o caminho para o perfil — era o que
+                    faltava para /perfil ter entrada pela interface no desktop
+                    (no mobile é a TabBar). */}
+                <Link
+                  to="/perfil"
+                  className={cn(linkFocusRing, 'flex items-center gap-3 rounded-[3px]')}
+                >
+                  <img
+                    src={session.data.user.avatarUrl}
+                    alt=""
+                    className="size-6 shrink-0 rounded-full object-cover"
+                  />
+                  <span className="max-w-[120px] truncate text-body-16 text-foreground">
+                    {session.data.user.name}
+                  </span>
+                </Link>
+                <Button
+                  type="button"
+                  disabled={logout.isPending}
+                  onClick={() => logout.mutate()}
+                  className="h-[35px] w-[85px] text-body-16 text-primary-foreground"
+                >
+                  {logout.isPending ? 'Saindo…' : 'Sair'}
+                </Button>
+              </div>
+            ) : (
+              <Button asChild className="h-[35px] w-[100px] gap-1 text-body-16 text-primary-foreground">
+                {/* Fase 5 (specs/05-auth.md §9): rota real, não search param
+                    — `redirect` carrega a página de origem para o "retorno
+                    ao fluxo anterior" (§3). */}
+                <Link to="/login" search={{ redirect: pathname === '/' ? undefined : pathname }}>
+                  <LogIn className="size-5" />
+                  Entrar
+                </Link>
+              </Button>
+            )}
           </div>
         </div>
       </div>

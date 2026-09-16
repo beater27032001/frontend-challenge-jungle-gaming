@@ -3,14 +3,94 @@ import { eth, roundEth } from '@/lib/money'
 import { createOrderSchema } from '@/types'
 import type { Order } from '@/types'
 import { bumpNftVersion, db, persist } from '../db'
+import { emitOrderUpdated } from '../realtime'
 import { activeScenario, withScenario } from '../scenarios'
 import { apiError, requireSession, sha256Hex } from '../utils'
 
-/** Orders: idempotency-key driven creation + read-time payment resolution. */
+/** Orders: idempotency-key driven creation + payment resolution. */
+
+const RESOLVE_AFTER_MS = 1500
 
 function toResponse(order: (typeof db.orders)[number]): Order {
   const { ownerId: _ownerId, ...rest } = order
   return rest
+}
+
+/**
+ * Estorno de pedido recusado. A criação debita estoque e carrinho de imediato
+ * (reserva otimista: é o que impede dois pedidos concorrentes de comprar a
+ * mesma edição), mas `declined` é terminal — sem devolver, o usuário perde o
+ * carrinho e o estoque some por uma compra que não aconteceu. O §3 exige
+ * preservar os itens em falha.
+ *
+ * Devolve exatamente o que foi debitado, item a item: `Order.items` é snapshot
+ * imutável da cotação, então as quantidades aqui são as mesmas que saíram.
+ * Linha que ainda existe no carrinho volta a somar; linha já removida é
+ * recriada.
+ *
+ * ponytail: sem teto em `available` — isto é reversão do próprio débito, não
+ * um ajuste de inventário. Se um dia houver outra origem de estoque, aí sim
+ * vale limitar por `totalSupply`.
+ */
+function restoreDeclined(order: (typeof db.orders)[number]): void {
+  const cart = db.carts[order.ownerId] ?? (db.carts[order.ownerId] = [])
+  const touchedNftIds = new Set<string>()
+
+  for (const item of order.items) {
+    const nft = db.nfts.find((n) => n.id === item.nftId)
+    const edition = nft?.editions.find((e) => e.id === item.editionId)
+    if (nft && edition) {
+      edition.available += item.quantity
+      touchedNftIds.add(nft.id)
+    }
+
+    const row = cart.find((r) => r.nftId === item.nftId && r.editionId === item.editionId)
+    if (row) {
+      row.quantity += item.quantity
+    } else {
+      db.counters.cartItem += 1
+      cart.push({
+        id: `ci_${db.counters.cartItem}`,
+        nftId: item.nftId,
+        editionId: item.editionId,
+        quantity: item.quantity,
+      })
+    }
+  }
+
+  // `bumpNftVersion` recalcula os derivados e emite `nft.updated`: quem estiver
+  // olhando o catálogo vê o estoque voltar sem precisar recarregar.
+  for (const nftId of touchedNftIds) bumpNftVersion(nftId)
+}
+
+/**
+ * Resolve o pagamento quando o prazo venceu e emite `order.updated` uma única
+ * vez (o segundo chamador encontra `status !== 'pending'` e sai). Dois
+ * gatilhos: o `setTimeout` da criação (caminho de tempo real, sem polling) e o
+ * `GET /orders/:id` (caminho de recuperação após refresh, quando o timer do
+ * contexto anterior morreu com a página). Pedido confirmado ou recusado é
+ * terminal — nunca volta para `pending` (§7).
+ */
+async function resolveOrderIfDue(order: (typeof db.orders)[number]): Promise<void> {
+  if (order.status !== 'pending') return
+  if (Date.now() < new Date(order.createdAt).getTime() + RESOLVE_AFTER_MS) return
+  // Um reset do db durante a espera descarta o pedido: nada a resolver nem a
+  // anunciar para um recurso que não existe mais.
+  if (!db.orders.includes(order)) return
+
+  if (activeScenario() === 'payment-declined') {
+    order.status = 'declined'
+    order.declineReason = 'Pagamento recusado pela operadora simulada.'
+    restoreDeclined(order)
+  } else {
+    order.status = 'confirmed'
+    order.txHash = `0x${await sha256Hex(order.id)}`
+    order.explorerUrl = `https://example.com/tx/${order.txHash}`
+  }
+  order.version = 2
+  order.resolvedAt = new Date().toISOString()
+  persist()
+  emitOrderUpdated(toResponse(order), order.ownerId)
 }
 
 export const orders = [
@@ -137,6 +217,11 @@ export const orders = [
       db.idempotency[idempotencyKey] = { fingerprint, orderId }
       persist()
 
+      // O pagamento resolve sozinho e anuncia por `order.updated` — o cliente
+      // não precisa fazer polling. O timer morre com a página; quem recarrega
+      // recupera pelo `GET /orders/:id`, que resolve na leitura.
+      setTimeout(() => void resolveOrderIfDue(order), RESOLVE_AFTER_MS + 50)
+
       if (activeScenario() === 'order-timeout') {
         return HttpResponse.error()
       }
@@ -152,19 +237,7 @@ export const orders = [
       if (!order) return apiError(404, 'not_found', 'Pedido não encontrado.')
       if (order.ownerId !== user.id) return apiError(403, 'forbidden', 'Este pedido pertence a outro usuário.')
 
-      if (order.status === 'pending' && Date.now() >= new Date(order.createdAt).getTime() + 1500) {
-        if (activeScenario() === 'payment-declined') {
-          order.status = 'declined'
-          order.declineReason = 'Pagamento recusado pela operadora simulada.'
-        } else {
-          order.status = 'confirmed'
-          order.txHash = `0x${await sha256Hex(order.id)}`
-          order.explorerUrl = `https://example.com/tx/${order.txHash}`
-        }
-        order.version = 2
-        order.resolvedAt = new Date().toISOString()
-        persist()
-      }
+      await resolveOrderIfDue(order)
 
       return HttpResponse.json(toResponse(order))
     }),

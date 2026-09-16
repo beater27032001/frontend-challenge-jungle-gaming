@@ -1,6 +1,7 @@
 import { Heart, House, Plus, ShoppingCart, User } from 'lucide-react'
-import { Link, useLocation } from '@tanstack/react-router'
+import { Link, useLocation, useSearch } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
+import { useCartCount } from '@/features/cart/queries'
 import { cn, linkFocusRing } from '@/lib/utils'
 
 /**
@@ -9,7 +10,22 @@ import { cn, linkFocusRing } from '@/lib/utils'
  */
 export function TabBar() {
   const pathname = useLocation({ select: (l) => l.pathname })
-  const isHomeActive = pathname === '/'
+  // `fav` separa os dois itens: a home "pura" e a home filtrada por favoritos
+  // são a mesma rota, então `pathname === '/'` sozinho acenderia os dois.
+  // A TabBar vive no root, que não tem `validateSearch` — então aqui `fav`
+  // chega CRU, como a string 'true', e não como o booleano que a rota do
+  // catálogo produz. Aceita os dois, mesma convenção do `catalogSearchSchema`.
+  const fav = useSearch({
+    strict: false,
+    select: (sp) => {
+      const raw = (sp as { fav?: unknown }).fav
+      return raw === true || raw === 'true'
+    },
+  })
+  const isHomeActive = pathname === '/' && !fav
+  const isFavActive = pathname === '/' && fav
+  const isProfileActive = pathname === '/perfil' || pathname === '/carteiras'
+  const cartCount = useCartCount()
 
   return (
     <div className="fixed inset-x-0 bottom-0 z-40 h-[126px] lg:hidden">
@@ -40,7 +56,20 @@ export function TabBar() {
       <nav aria-label="Navegação principal" className="relative flex h-full items-center justify-around px-6">
         <Link
           to="/"
-          aria-current={isHomeActive ? 'page' : undefined}
+          // Único item da barra sem nome acessível: os outros três têm
+          // `aria-label` e este tinha só o ícone, o que deixa o link anônimo
+          // para leitor de tela.
+          aria-label="Início"
+          // `aria-current="page"` fica no Início mesmo na visão de favoritos, e
+          // isso é correto: favoritos é um FILTRO do catálogo (`/?fav=true`),
+          // como `?q=` e `?categoria=`, não outra página. Quem está lá está no
+          // Início. Tentar separar os dois pelo `aria-current` esbarra no
+          // <Link>, que o define sozinho e faz casamento parcial de search —
+          // um link sem search casa com qualquer URL da mesma rota.
+          //
+          // O que distingue os dois itens é o estado VISUAL (cor + ponto), que
+          // é calculado abaixo.
+          search={(prev: Record<string, unknown>) => ({ ...prev, fav: undefined })}
           className={cn(
             linkFocusRing,
             'flex flex-col items-center gap-1 text-text-secondary',
@@ -52,30 +81,55 @@ export function TabBar() {
               ARCHITECTURE.md): estado nunca só por cor. */}
           {isHomeActive && <span aria-hidden className="size-1 rounded-full bg-current" />}
         </Link>
-        <button
-          type="button"
-          disabled // fase 4 liga isto
+        {/* Favoritos: a home com `?fav=true` filtra a grade pelos ids de
+            GET /favorites. Era o único caminho para os favoritos no mobile, e
+            estava desabilitado desde a fase 4. */}
+        <Link
+          to="/"
+          search={(prev: Record<string, unknown>) => ({ ...prev, fav: true as const })}
           aria-label="Favoritos"
-          className="flex flex-col items-center gap-1 text-text-secondary"
+          className={cn(
+            'flex flex-col items-center gap-1',
+            isFavActive ? 'text-text-accent' : 'text-text-secondary',
+          )}
         >
           <Heart className="size-5" />
-        </button>
-        <button
-          type="button"
-          disabled // fase 6 liga isto
-          aria-label="Carrinho"
-          className="flex flex-col items-center gap-1 text-text-secondary"
+          {/* Estado nunca só por cor, mesmo padrão do item Início. */}
+          {isFavActive && <span aria-hidden className="size-1 rounded-full bg-current" />}
+        </Link>
+        {/* Fase 6. Sem estado ativo: em `/carrinho` esta barra não é renderizada
+            (a folha Payment Summary ocupa o fundo — __root.tsx). */}
+        <Link
+          to="/carrinho"
+          aria-label={cartCount > 0 ? `Carrinho (${cartCount} ${cartCount === 1 ? 'item' : 'itens'})` : 'Carrinho'}
+          className={cn(linkFocusRing, 'relative flex flex-col items-center gap-1 text-text-secondary')}
         >
           <ShoppingCart className="size-5" />
-        </button>
-        <button
-          type="button"
-          disabled // fase 8 liga isto
+          {cartCount > 0 && (
+            <span
+              aria-hidden
+              className="absolute -right-2 -top-2 flex size-4 items-center justify-center rounded-full bg-primary text-tiny-10 font-bold text-primary-foreground"
+            >
+              {cartCount}
+            </span>
+          )}
+        </Link>
+        {/* Fase 8: rota real. `/perfil` é privada — sem sessão o `beforeLoad`
+            redireciona para o login com `redirect=/perfil`, então o visitante
+            não cai em tela vazia nem em 404. */}
+        <Link
+          to="/perfil"
           aria-label="Perfil"
-          className="flex flex-col items-center gap-1 text-text-secondary"
+          aria-current={isProfileActive ? 'page' : undefined}
+          className={cn(
+            linkFocusRing,
+            'flex flex-col items-center gap-1 text-text-secondary',
+            isProfileActive && 'text-text-accent',
+          )}
         >
           <User className="size-5" />
-        </button>
+          {isProfileActive && <span aria-hidden className="size-1 rounded-full bg-current" />}
+        </Link>
       </nav>
     </div>
   )

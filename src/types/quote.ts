@@ -15,6 +15,11 @@ export interface QuoteItem {
   nftId: string
   editionId: string
   title: string
+  /** Fase 7: a arte faz parte do snapshot. O recibo (`Order.items`) desenha a
+   * obra (spec 07 §3) e NUNCA pode reler o catálogo para achá-la — sem este
+   * campo a tela de confirmação teria de derivar a URL da imagem no cliente,
+   * duplicando regra da fixture. */
+  imageUrl: string
   editionLabel: string
   quantity: number
   unitPriceEth: EthAmount
