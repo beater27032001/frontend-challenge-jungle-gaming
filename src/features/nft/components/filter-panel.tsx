@@ -104,7 +104,7 @@ export function FilterPanel({
   return (
     <div className="flex w-[310px] flex-col gap-10 bg-card p-5">
       <section>
-        <h3 className="text-body-18 leading-[16px] font-bold text-foreground">Coleções</h3>
+        <h2 className="text-body-18 leading-[16px] font-bold text-foreground">Coleções</h2>
         <div className="mt-3">
           {NFT_CATEGORIES.map((category) => (
             <FilterRow
@@ -120,7 +120,7 @@ export function FilterPanel({
       </section>
 
       <section>
-        <h3 className="text-body-18 leading-[16px] font-bold text-foreground">Faixa de preço</h3>
+        <h2 className="text-body-18 leading-[16px] font-bold text-foreground">Faixa de preço</h2>
         <div className="mt-3 px-3">
           <Slider
             min={0}
@@ -136,7 +136,13 @@ export function FilterPanel({
           <Button
             type="button"
             onClick={applyPrice}
-            className="mt-3 h-auto w-fit rounded-[6px] px-3 py-2 text-body-16 leading-[20px] font-bold"
+            // `text-primary-foreground` explícito: o tailwind-merge classifica
+            // `text-body-16` como classe de COR e remove a cor da variante
+            // `default` do Button. O texto caía para `foreground` herdado —
+            // #f5f1eb sobre #d28a4c dá 2.50:1, abaixo do mínimo de 4.5:1. Com
+            // `ink` são 6.85:1. Era o único botão da aplicação nessa condição,
+            // e foi o Lighthouse que acusou.
+            className="mt-3 h-auto w-fit rounded-[6px] px-3 py-2 text-body-16 leading-[20px] font-bold text-primary-foreground"
           >
             Aplicar
           </Button>
@@ -144,7 +150,7 @@ export function FilterPanel({
       </section>
 
       <section>
-        <h3 className="text-body-18 leading-[16px] font-bold text-foreground">Rede</h3>
+        <h2 className="text-body-18 leading-[16px] font-bold text-foreground">Rede</h2>
         <div className="mt-3">
           {NETWORKS.map((network) => (
             <FilterRow

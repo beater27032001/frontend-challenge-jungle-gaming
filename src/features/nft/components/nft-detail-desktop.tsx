@@ -140,6 +140,10 @@ export function NftDetailDesktop(props: NftDetailViewProps) {
 
               <div className="flex items-center gap-2">
                 <div
+                  // `role="img"`: aria-label em <div> sem role e ignorado por
+                  // leitor de tela e reprovado como aria-prohibited-attr. A fileira
+                  // de estrelas E uma imagem de texto — role img e o papel correto.
+                  role="img"
                   aria-label={`Avaliação: ${nft.ratingAvg} de 5, ${nft.ratingCount} avaliações`}
                   className="flex items-center gap-1"
                 >
