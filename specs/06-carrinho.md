@@ -13,8 +13,14 @@ Figma `BliVZDosX5BcSpvhYvdE0V`. Desktop `11:1278` · Mobile `16:360`.
 Duas colunas, `justify-between`: tabela de itens à esquerda, **Resumo da carteira**
 de 332 à direita.
 
-Acima do Cart Body há um bloco de 244×16 em `y=0` (breadcrumb ou título de seção,
-não extraído em detalhe).
+Acima do Cart Body, um bloco de 244×16 em `y=0` (`70402:3337`): é o **breadcrumb**
+`Início / Mercado / Carrinho` (`11:1309`), não um título de seção. Mesmo padrão e
+mesma tipografia do breadcrumb da fase 4 (14px, separadores em `text-secondary`,
+item atual em `foreground` com `aria-current="page"`).
+
+⚠️ O desktop **não desenha título de página**. O `<h1>` ainda precisa existir para
+leitor de tela — renderizar em `sr-only`. (O mobile tem título visível: "Carrinho
+de NFTs" no Screen Header, `16:415`.)
 
 ## 2. Tabela de itens — `70369:241`, `gap-[12px]`
 
@@ -115,6 +121,12 @@ Cada item é um card `358×100`, `bg #241612`, **raio 14**, sombra
 | Preço | `x 109, y 69` | **18px bold, lh 16, `text-accent`** |
 | Stepper | `x 261, y 38` | ver 6.4 |
 | Lixeira | `x 313, y 42, 24×24` | `Iconly/Curved/Delete`, **só no item 3** |
+
+⚠️ **A lixeira colide com o botão `+` no próprio Figma, e isso foi verificado.**
+O stepper (`16:665`) ocupa `x 261` + 81 = até 342, com o `+` em `x 318..342`; a
+lixeira (`16:463`) está em `x 313..337`. Sobrepostos. Não é erro de transcrição:
+é o arquivo. Leitura adotada: uma linha à direita — stepper, depois lixeira —
+centralizada verticalmente, sem sobreposição.
 
 ⚠️ A thumb aparece duplicada no Figma (`Rectangle 106` + uma cópia
 `mix-blend-multiply` deslocada 1–2px). É artefato de composição do designer para

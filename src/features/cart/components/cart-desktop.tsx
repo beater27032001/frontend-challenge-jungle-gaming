@@ -39,7 +39,28 @@ export function CartDesktop(props: CartViewProps) {
 
   return (
     <div className="mx-auto hidden max-w-content px-6 py-8 lg:block">
-      <h1 className="text-body-16 font-bold leading-[16px] text-foreground">Carrinho de NFTs</h1>
+      {/* O bloco de 244x16 acima do Cart Body (`70402:3337`) e o breadcrumb
+          "Inicio / Mercado / Carrinho" (`11:1309`), nao um titulo — mesmo
+          padrao da fase 4. O <h1> continua existindo para leitor de tela, que
+          precisa do titulo da pagina; o Figma desktop nao o desenha. */}
+      <nav aria-label="Trilha de navegação" className="flex h-[16px] items-center gap-2 py-2">
+        <Link to="/" className={cn(linkFocusRing, 'text-body-14 text-text-secondary')}>
+          Início
+        </Link>
+        <span aria-hidden className="text-body-14 text-text-secondary">
+          /
+        </span>
+        <Link to="/" className={cn(linkFocusRing, 'text-body-14 text-text-secondary')}>
+          Mercado
+        </Link>
+        <span aria-hidden className="text-body-14 text-text-secondary">
+          /
+        </span>
+        <span aria-current="page" className="text-body-14 text-foreground">
+          Carrinho
+        </span>
+      </nav>
+      <h1 className="sr-only">Carrinho de NFTs</h1>
 
       <div className="mt-8 flex items-start justify-between gap-12">
         <div className="min-w-0 flex-1">
