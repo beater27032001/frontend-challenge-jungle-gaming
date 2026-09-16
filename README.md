@@ -69,8 +69,8 @@ precisa entrar.
 Cupons da fixture: `GREEN10` (10% válido) e `EXPIRED20` (20%, expirado — serve para o fluxo
 de cupom inválido).
 
-> A tela de login/cadastro é a fase 5, em andamento. Hoje as credenciais são usadas via
-> `POST /api/auth/login` (é o que a suíte E2E faz, ver `e2e/helpers.ts`).
+> Entre por **Entrar** no header (desktop: modal sobre o catálogo; mobile: tela cheia em
+> `/login`). Depois de autenticar você volta para a página de onde saiu.
 
 ## Cenários de mock
 
@@ -201,11 +201,14 @@ reproduzi-los — cada um tem cobertura executável em `e2e/api-contracts.spec.t
 3. **Esperado:** um toast de erro com a mensagem vinda da API — nenhum sucesso otimista. A
    regra do projeto é que nada é confirmado antes da resposta do mock.
 4. No nível REST: `GET /api/auth/session` e qualquer rota autenticada respondem 401
-   `session_expired`. A tela de login e a retomada do fluxo após reautenticar são da fase 5.
+   `session_expired`. Na interface, o interceptor do Axios detecta o `session_expired` uma
+   vez por rajada (não um toast por query em voo) e leva ao login, de onde o `redirect`
+   devolve à página de origem.
 
 ### Conflito de cadastro — `register-conflict`
 
-Ponto de entrada na interface: tela de cadastro (fase 5, em andamento). Hoje:
+Ponto de entrada na interface: **Entrar → Criar conta** e submeter com um e-mail já
+cadastrado. O erro chega associado ao campo de e-mail, não só num toast. No nível REST:
 
 ```js
 window.__mocks.setScenario('register-conflict')
@@ -220,7 +223,11 @@ await fetch('/api/auth/register', {
 
 Não depende de cenário: está na fixture. `POST /api/quote` com `couponCode: 'EXPIRED20'`
 responde 400 `coupon_expired`, e um código inexistente responde 400 `coupon_invalid`;
-`GREEN10` aplica 10% de desconto. A interface do cupom é a fase 6.
+`GREEN10` aplica 10% de desconto.
+
+Na interface: adicione um NFT ao carrinho, abra **/carrinho** e use o campo de cupom do
+resumo. O erro aparece associado ao campo. Subtotal, desconto, taxa de rede e total vêm
+sempre de `POST /api/quote` — nunca de cálculo local.
 
 ### Preço alterado durante a compra — `price-changed`
 
@@ -334,20 +341,28 @@ PR para `dev`. Histórico das entregas em `.pipeline/history/LOG.md`.
 | 2 | Design system (shadcn adaptado, shell responsivo) | entregue |
 | 3 | Início / catálogo (busca, filtros, ordenação, paginação na URL) | entregue |
 | 4 | Detalhes do NFT (galeria, edição, quantidade, compra) | entregue |
-| 5 | Conta e sessão (login, cadastro, logout, rotas privadas) | **em andamento** |
-| 6 | Carrinho | a fazer |
+| 5 | Conta e sessão (login, cadastro, logout, favoritos) | entregue |
+| 6 | Carrinho (quantidade, remoção, cupom, cotação) | entregue |
 | 7 | Checkout + confirmação | a fazer |
 | 8 | Perfil + carteiras | a fazer |
-| 9 | Tempo real (`nft.updated`, `order.updated`) | **em andamento** |
-| 10 | Testes E2E completos + regressão visual | a fazer |
-| 11 | Acessibilidade + Lighthouse | a fazer |
+| 9 | Tempo real (`nft.updated`, `order.updated`) | entregue |
+| 10 | Testes E2E completos | feita ao longo das fases |
+| 11 | Acessibilidade + Lighthouse | a11y contínua; Lighthouse não executado |
 | 12 | Deploy + documentação | em andamento (este README; URL pública pendente) |
 
-O que já está de pé e pode ser avaliado hoje: os **13 cenários de mock** com seleção e reset,
-os contratos REST completos de §5 (catálogo, favoritos, carrinho, cotação, pedidos, perfil,
-carteiras, auth), o **catálogo** com estado na URL sobrevivendo a refresh e histórico, o
-**detalhe do NFT** com acesso direto, 404, edição indisponível e limite de quantidade, e a
-suíte Playwright em desktop e mobile cobrindo esses fluxos mais os contratos REST.
+O que já está de pé e pode ser avaliado hoje:
 
-Favoritos com atualização otimista e rollback dependem de sessão (fase 5): o controle existe
-no detalhe, `disabled`, e entra junto do login — não há favoritar de fachada.
+- os **13 cenários de mock**, com seleção e reset;
+- os contratos REST completos do §5 — catálogo, favoritos, carrinho, cotação, pedidos,
+  perfil, carteiras e auth;
+- o **catálogo**, com busca, filtros, ordenação e paginação na URL, sobrevivendo a refresh
+  e ao histórico;
+- o **detalhe do NFT**, com acesso direto, 404, edição indisponível e limite de quantidade;
+- **conta e sessão**: login, cadastro, logout, sessão expirada e retomada do fluxo, mais
+  favoritos com atualização otimista e rollback;
+- o **carrinho**: quantidade, remoção, cupom válido/inválido/expirado e cotação da API;
+- **tempo real** pelo `socket.io-client`: `nft.updated` e `order.updated`, com guarda de
+  versão, tolerância a duplicata e a evento antigo, e reconciliação após reconexão;
+- a suíte **Playwright** em desktop (1440) e mobile (390) cobrindo tudo isso.
+
+Falta o **checkout com confirmação** (fase 7) e o **perfil com carteiras** (fase 8).
