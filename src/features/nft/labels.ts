@@ -47,3 +47,9 @@ export const RARITY_LABELS: Record<NftRarity, string> = {
   epic: 'Épico',
   legendary: 'Lendário',
 }
+
+/** "nft-003" → "#0003". A fase 4 formatava isto inline no detalhe desktop e no
+ * mobile; a linha do carrinho (fase 6) é o terceiro call-site. */
+export function tokenIdOf(nftId: string): string {
+  return `#${nftId.replace('nft-', '').padStart(4, '0')}`
+}
