@@ -13,7 +13,7 @@ export function FeaturedBanner({ nft, isPending }: { nft: NftSummary | null; isP
   return (
     <section
       aria-labelledby="featured-banner-heading"
-      className="w-[310px] bg-[linear-gradient(to_bottom,rgba(210,138,76,0.1),rgba(210,138,76,0.03))] pt-6 pb-1"
+      className="w-[310px] bg-[linear-gradient(to_bottom,color-mix(in_srgb,var(--color-primary)_10%,transparent),color-mix(in_srgb,var(--color-primary)_3%,transparent))] pt-6 pb-1"
     >
       <h2
         id="featured-banner-heading"
