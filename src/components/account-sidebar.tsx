@@ -43,8 +43,14 @@ const INERT_ITEMS = [
   { label: 'Suporte', Icon: AlertTriangle, size: 'size-[18px]' },
 ] as const
 
+// `whitespace-nowrap` é o que segura a faixa mobile: sem ele os rótulos de
+// duas palavras quebravam dentro do <li>, e como a altura da linha vem de
+// `leading-[45px]` (spec §1, não trocar por py), cada quebra somava 45px —
+// "Lista de interesse" virava 3 linhas de 45 com glifos de 15px boiando por
+// cima uns dos outros. O <li> também precisa de `shrink-0`: o `shrink-0` do
+// rowBase vale para o filho, não para o item flex do <ul>.
 const rowBase =
-  'flex shrink-0 items-center px-4 text-body-15 leading-[45px] text-text-accent md:leading-[45px]'
+  'flex shrink-0 items-center whitespace-nowrap px-4 text-body-15 leading-[45px] text-text-accent md:leading-[45px]'
 // A barra do item ativo: à esquerda no desktop (Figma), embaixo no mobile,
 // onde a faixa é horizontal e uma barra lateral não leria como "ativo".
 const activeBar = 'border-b-4 border-primary md:border-b-0 md:border-l-[6px]'
@@ -97,7 +103,7 @@ export function AccountSidebar() {
       <h2 className="px-4 pb-2 text-body-18 font-bold leading-4 text-foreground md:p-[10px] md:pb-[10px]">
         Meu perfil
       </h2>
-      <ul className="flex overflow-x-auto md:flex-col md:overflow-x-visible">
+      <ul className="flex overflow-x-auto md:flex-col md:overflow-x-visible [&>li]:shrink-0">
         <li>
           <Link
             to="/perfil"
