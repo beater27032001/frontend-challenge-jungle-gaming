@@ -40,6 +40,33 @@ test.describe('Rota privada', () => {
   })
 })
 
+test.describe('Shell das telas de conta', () => {
+  // Os frames `9:1238` e `9:1670` têm 1080px exatos e terminam logo depois do
+  // formulário — sem rodapé, ao contrário de todo outro frame desktop (1657 a
+  // 3668px). O caso positivo (`/` ainda tem rodapé) vai junto: sem ele o teste
+  // passaria até se o Footer sumisse do app inteiro.
+  test('/perfil e /carteiras não renderizam o rodapé; a home continua renderizando', async ({
+    page,
+  }) => {
+    // Ancorar em conteúdo JÁ renderizado antes de afirmar ausência: logo após
+    // `awaitMswReady` o React ainda não pintou, e `toHaveCount(0)` casaria com
+    // a página vazia — passando mesmo com o rodapé no lugar (medido: 3 polls
+    // com 0 elementos antes de virar 1).
+    await openAs(page, ANA, '/perfil')
+    await expect(page.getByRole('navigation', { name: 'Minha conta' })).toBeVisible()
+    await expect(page.locator('footer')).toHaveCount(0)
+
+    await page.goto('/carteiras')
+    await awaitMswReady(page)
+    await expect(page.getByRole('navigation', { name: 'Minha conta' })).toBeVisible()
+    await expect(page.locator('footer')).toHaveCount(0)
+
+    await page.goto('/')
+    await awaitMswReady(page)
+    await expect(page.locator('footer')).toHaveCount(1)
+  })
+})
+
 test.describe('Account Sidebar', () => {
   test('aria-current marca só a página atual, nas duas telas', async ({ page }) => {
     await openAs(page, ANA, '/perfil')
